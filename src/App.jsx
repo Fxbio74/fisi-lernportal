@@ -1063,7 +1063,7 @@ export default function App() {
           </div>
         </div>
         <button onClick={()=>setShowUpload(true)} style={{ display:"flex", alignItems:"center", gap:"0.45rem", background:"#fff", color:"#000", border:"none", borderRadius:"8px", padding:"0.55rem 1.1rem", fontSize:"0.82rem", fontWeight:"bold", cursor:"pointer", fontFamily:"inherit" }}>
-          <Icon name="plus" size={14}/> HINZUFUEGEN
+          <Icon name="plus" size={14}/> HINZUFüGEN
         </button>
       </div>
 
