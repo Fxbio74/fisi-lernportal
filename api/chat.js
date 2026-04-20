@@ -19,7 +19,9 @@ export default async function handler(req, res) {
     }));
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
+
+    // Aktuelles Modell: gemini-2.0-flash (kostenlos, schnell)
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent');
     url.searchParams.set('key', apiKey);
 
     const response = await fetch(url.toString(), {
