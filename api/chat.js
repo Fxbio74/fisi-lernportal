@@ -13,27 +13,20 @@ export default async function handler(req, res) {
   try {
     const { messages, system } = req.body;
 
-    const geminiMessages = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }]
-    }));
-
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    // Aktuelles Modell: gemini-2.0-flash (kostenlos, schnell)
-    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent');
-    url.searchParams.set('key', apiKey);
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + process.env.GROQ_API_KEY
+      },
       body: JSON.stringify({
-        system_instruction: system ? { parts: [{ text: system }] } : undefined,
-        contents: geminiMessages,
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.7
-        }
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 2048,
+        temperature: 0.7,
+        messages: [
+          ...(system ? [{ role: 'system', content: system }] : []),
+          ...messages
+        ]
       })
     });
 
@@ -43,8 +36,9 @@ export default async function handler(req, res) {
       return res.status(response.status).json({ error: data });
     }
 
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const text = data.choices?.[0]?.message?.content || '';
 
+    // Antwort im gleichen Format wie vorher zurueckgeben
     return res.status(200).json({
       content: [{ type: 'text', text }]
     });
