@@ -19,7 +19,10 @@ export default async function handler(req, res) {
       parts: [{ text: msg.content }]
     }));
 
-    const url = '[generativelanguage.googleapis.com](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=)' + process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
+    const baseUrl = '[generativelanguage.googleapis.com](https://generativelanguage.googleapis.com)';
+    const path = '/v1beta/models/gemini-1.5-flash:generateContent';
+    const url = baseUrl + path + '?key=' + apiKey;
 
     const response = await fetch(url, {
       method: 'POST',
