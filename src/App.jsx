@@ -33,7 +33,22 @@ const FILE_ICONS = {
 function getFileInfo(f){ const e=f.split(".").pop().toLowerCase(); return FILE_ICONS[e]||{icon:"📎",color:"#888",label:e.toUpperCase()}; }
 function formatBytes(b){ if(!b)return""; if(b<1024)return b+" B"; if(b<1048576)return(b/1024).toFixed(1)+" KB"; return(b/1048576).toFixed(1)+" MB"; }
 
-// ── PDF & DOCX Generator ──────────────────────────────────────────────────────
+// ── YouTube ID extrahieren ────────────────────────────────────────────────────
+function getYouTubeId(url) {
+  if (!url) return null;
+  const patterns = [
+    /youtu\.be\/([^?&]+)/,
+    /youtube\.com\/watch\?v=([^&]+)/,
+    /youtube\.com\/embed\/([^?&]+)/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// ── PDF Generator ─────────────────────────────────────────────────────────────
 function generatePDF(item) {
   const date=new Date(item.created_at).toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
   const content=(item.content||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -74,6 +89,37 @@ ${tags?`<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val=
   if(!window.JSZip){const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=doZip;document.head.appendChild(s);}else doZip();
 }
 
+// ── Prüfungs-PDF ──────────────────────────────────────────────────────────────
+function generatePruefungPDF(item, questions, answers, submitted) {
+  const score = submitted ? questions.filter((q,i) => answers[i] === q.correct).length : 0;
+  const percent = submitted ? Math.round((score/questions.length)*100) : 0;
+  const date = new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
+  const qHtml = questions.map((q,i) => {
+    const isCorrect = answers[i] === q.correct;
+    const color = !submitted ? "#1a1a1a" : isCorrect ? "#0a2e1a" : "#2e0a0a";
+    const border = !submitted ? "#ddd" : isCorrect ? "#22c55e" : "#ef4444";
+    return `<div style="margin-bottom:20px;padding:14px;background:${color};border:1px solid ${border};border-radius:8px">
+      <div style="font-weight:bold;margin-bottom:8px;color:${submitted?(isCorrect?"#22c55e":"#ef4444"):"#1a1a1a"}">${i+1}. ${q.question.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+      ${q.options.map((o,j)=>`<div style="padding:4px 8px;margin:3px 0;border-radius:4px;font-size:10pt;background:${submitted&&j===q.correct?"#1a3a1a":submitted&&j===answers[i]&&!isCorrect?"#3a1a1a":"#f8f9fa"}">${String.fromCharCode(65+j)}) ${o.replace(/&/g,"&amp;")}</div>`).join("")}
+      ${submitted&&!isCorrect&&q.explanation?`<div style="margin-top:8px;padding:8px;background:#1a2a3a;border-radius:4px;font-size:9pt;color:#93c5fd">💡 ${q.explanation.replace(/&/g,"&amp;")}</div>`:""}
+    </div>`;
+  }).join("");
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Prüfung: ${item.title}</title>
+<style>@page{margin:2cm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a}
+.header{background:#1F4E79;color:#fff;padding:16px 20px;border-radius:8px;margin-bottom:16px}
+.score{text-align:center;padding:16px;border-radius:8px;margin-bottom:16px;background:${percent>=80?"#0a2e1a":percent>=50?"#2e2a00":"#2e0a0a"};color:${percent>=80?"#22c55e":percent>=50?"#eab308":"#ef4444"};font-size:1.5rem;font-weight:bold}
+</style></head><body>
+<div class="header"><div style="font-size:8pt;letter-spacing:2px;color:#90cdf4;margin-bottom:4px">${item.category.toUpperCase()} · FISI PRÜFUNG</div>
+<div style="font-size:16pt;font-weight:bold">${item.title}</div>
+<div style="font-size:9pt;color:#bfdbfe">${date}</div></div>
+${submitted?`<div class="score">${score}/${questions.length} Punkte · ${percent}% · ${percent>=80?"Bestanden ✓":percent>=50?"Knapp ":"Nicht bestanden ✗"}</div>`:""}
+${qHtml}
+<div style="margin-top:20px;padding-top:12px;border-top:1px solid #ddd;font-size:8pt;color:#888">FISI Lernportal · IHK Heilbronn · Prüfung Mai 2026</div>
+</body></html>`;
+  const win=window.open(URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"})),"_blank");
+  if(win) win.onload=()=>setTimeout(()=>win.print(),500);
+}
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const Icon = ({ name, size=18 }) => {
   const p={fill:"none",stroke:"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round"};
@@ -95,222 +141,338 @@ const Icon = ({ name, size=18 }) => {
     sideOpen:  <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="14 8 11 12 14 16"/></svg>,
     sideClose: <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="11 8 14 12 11 16"/></svg>,
     send:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
-    bot:       <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="11"/><line x1="8" y1="15" x2="8" y2="15"/><line x1="16" y1="15" x2="16" y2="15"/></svg>,
+    bot:       <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="11"/></svg>,
     quiz:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
     lightbulb: <svg width={size} height={size} viewBox="0 0 24 24" {...p}><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 018.91 14"/></svg>,
+    youtube:   <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="none"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>,
+    pruefung:  <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
   };
   return icons[name]||null;
 };
 
+// ── KI API Call ───────────────────────────────────────────────────────────────
+async function callKI(messages, system) {
+  const res = await fetch("/api/chat", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ system, messages })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(data.error));
+  return data.content?.[0]?.text || "";
+}
+
 // ── KI Chat Modal ─────────────────────────────────────────────────────────────
 function KIChatModal({ item, onClose }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState(null); // null | "erklaeren" | "abfragen" | "tipps"
-  const bottomRef = useRef();
-  const col = CAT_COLORS[item.category] || CAT_COLORS["Sonstiges"];
+  const [messages,setMessages]=useState([]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [mode,setMode]=useState(null);
+  const bottomRef=useRef();
+  const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[messages]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior:"smooth" });
-  }, [messages]);
+  const systemPrompt=`Du bist ein FISI-Pruefungscoach fuer IHK Heilbronn Pruefung Mai 2026. Thema: "${item.title}" (${item.category}). Inhalt: ${item.content||"(Datei)"}. Erklaere auf Deutsch, klar, mit Praxisbeispielen. Merksaetze willkommen. Sei motivierend.`;
 
-  const systemPrompt = `Du bist ein hilfreicher FISI-Pruefungscoach fuer einen Auszubildenden der sich auf die IHK-Abschlusspruefung (Fachinformatiker Systemintegration, IHK Heilbronn, Mai 2026) vorbereitet.
-
-Das aktuelle Thema ist: "${item.title}" (Kategorie: ${item.category})
-
-Inhalt der Zusammenfassung:
-${item.content || "(Datei-Upload, kein Textinhalt)"}
-
-Deine Regeln:
-- Erklaere immer auf Deutsch, klar und verstaendlich
-- Nutze kurze Saetze und Beispiele aus der Praxis (z.B. ebm-papst, Firmennetzwerk)
-- Wenn du abfragst: stelle eine Frage, warte auf Antwort, gib dann Feedback
-- Merksaetze und Eselsbruecken sind sehr willkommen
-- Sei motivierend und positiv
-- Halte Antworten uebersichtlich (nicht zu lang)`;
-
-  const sendMessage = async (userMsg) => {
-    if (!userMsg.trim() || loading) return;
-    const newMessages = [...messages, { role:"user", content:userMsg }];
-    setMessages(newMessages);
-    setInput("");
-    setLoading(true);
+  const sendMessage=async(userMsg)=>{
+    if(!userMsg.trim()||loading) return;
+    const newMessages=[...messages,{role:"user",content:userMsg}];
+    setMessages(newMessages); setInput(""); setLoading(true);
     try {
-      const res = await fetch("/api/chat", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          system: systemPrompt,
-          messages: newMessages,
-        })
-      });
-      const data = await res.json();
-      const reply = data.content?.[0]?.text || "Fehler: " + JSON.stringify(data);
-      setMessages(prev => [...prev, { role:"assistant", content:reply }]);
+      const reply = await callKI(newMessages, systemPrompt);
+      setMessages(prev=>[...prev,{role:"assistant",content:reply}]);
     } catch(e) {
-      setMessages(prev => [...prev, { role:"assistant", content:"❌ Fehler bei der KI-Verbindung: "+e.message }]);
+      setMessages(prev=>[...prev,{role:"assistant",content:"❌ Fehler: "+e.message}]);
     }
     setLoading(false);
   };
 
-  const startMode = (m) => {
-    setMode(m);
-    const prompts = {
-      erklaeren: `Erklaere mir das Thema "${item.title}" ausfuehrlich mit Beispielen und einem Merksatz. Geh auf die wichtigsten Punkte ein die in der IHK-Pruefung relevant sind.`,
-      abfragen:  `Frage mich jetzt zum Thema "${item.title}" ab. Stelle mir eine konkrete Frage wie sie in der IHK-Pruefung vorkommen koennte. Warte auf meine Antwort bevor du die naechste Frage stellst.`,
-      tipps:     `Gib mir die Top-5 Pruefungstipps und haeufige Fallen zum Thema "${item.title}". Was wird in der IHK oft gefragt und was machen Schueler dabei falsch?`,
+  const startMode=(m)=>{
+    setMode(m); setMessages([]);
+    const prompts={
+      erklaeren:`Erklaere mir "${item.title}" ausfuehrlich mit Beispielen und Merksatz. Was ist pruefungsrelevant?`,
+      abfragen:`Stelle mir eine IHK-Pruefungsfrage zu "${item.title}". Warte auf meine Antwort.`,
+      tipps:`Top-5 Pruefungstipps und haeufige Fallen bei "${item.title}".`,
     };
-    sendMessage(prompts[m]);
+    const firstMessages=[{role:"user",content:prompts[m]}];
+    setMessages(firstMessages); setLoading(true);
+    callKI(firstMessages,systemPrompt).then(reply=>{
+      setMessages([{role:"user",content:prompts[m]},{role:"assistant",content:reply}]);
+      setLoading(false);
+    }).catch(e=>{
+      setMessages([{role:"user",content:prompts[m]},{role:"assistant",content:"❌ Fehler: "+e.message}]);
+      setLoading(false);
+    });
   };
 
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.93)", backdropFilter:"blur(12px)", zIndex:110, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
-      <div style={{ background:"#080808", border:`1px solid ${col.badge}40`, borderRadius:"16px", width:"100%", maxWidth:"720px", height:"85vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:`0 0 60px ${col.badge}15` }}>
-
-        {/* Header */}
-        <div style={{ padding:"1rem 1.5rem", borderBottom:`1px solid ${col.badge}20`, background:`linear-gradient(135deg,${col.bg}cc,#080808)`, flexShrink:0 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
-              <div style={{ width:"32px", height:"32px", background:`${col.badge}20`, border:`1px solid ${col.badge}40`, borderRadius:"8px", display:"flex", alignItems:"center", justifyContent:"center", color:col.badge }}>
-                <Icon name="bot" size={16}/>
-              </div>
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#080808",border:`1px solid ${col.badge}40`,borderRadius:"16px",width:"100%",maxWidth:"720px",height:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"1rem 1.5rem",borderBottom:`1px solid ${col.badge}20`,background:`linear-gradient(135deg,${col.bg}cc,#080808)`,flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}>
+              <div style={{width:"32px",height:"32px",background:`${col.badge}20`,border:`1px solid ${col.badge}40`,borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge}}><Icon name="bot" size={16}/></div>
               <div>
-                <div style={{ fontSize:"0.75rem", color:col.badge, fontWeight:"bold", letterSpacing:"0.1em" }}>KI LERNASSISTENT</div>
-                <div style={{ fontSize:"0.85rem", color:"#ccc", fontFamily:"'Courier New',monospace", fontWeight:"bold" }}>{item.title}</div>
+                <div style={{fontSize:"0.7rem",color:col.badge,fontWeight:"bold",letterSpacing:"0.1em"}}>KI LERNASSISTENT</div>
+                <div style={{fontSize:"0.85rem",color:"#ccc",fontFamily:"'Courier New',monospace",fontWeight:"bold"}}>{item.title}</div>
               </div>
             </div>
-            <button onClick={onClose} style={{ background:"none", border:"1px solid #1e1e1e", borderRadius:"7px", padding:"0.4rem", cursor:"pointer", color:"#555" }} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name="close" size={16}/></button>
+            <button onClick={onClose} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:"#555"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name="close" size={16}/></button>
           </div>
-
-          {/* Modus-Buttons */}
-          {!mode && (
-            <div style={{ marginTop:"1rem" }}>
-              <div style={{ fontSize:"0.7rem", color:"#555", marginBottom:"0.6rem" }}>Was möchtest du tun?</div>
-              <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
-                {[
-                  { id:"erklaeren", icon:"lightbulb", label:"Thema erklären", color:"#eab308", desc:"Ausführliche Erklärung mit Beispielen" },
-                  { id:"abfragen",  icon:"quiz",      label:"Mich abfragen",  color:"#a855f7", desc:"Prüfungsfragen stellen" },
-                  { id:"tipps",     icon:"star",      label:"Prüfungstipps",  color:"#22c55e", desc:"Häufige Fehler & Fallen" },
-                ].map(btn => (
-                  <button key={btn.id} onClick={()=>startMode(btn.id)} style={{
-                    flex:"1", minWidth:"140px", padding:"0.75rem 1rem",
-                    background:`${btn.color}10`, border:`1px solid ${btn.color}30`,
-                    borderRadius:"10px", cursor:"pointer", color:btn.color,
-                    fontFamily:"inherit", textAlign:"left", transition:"all 0.2s"
-                  }} onMouseEnter={e=>e.currentTarget.style.background=`${btn.color}20`}
-                     onMouseLeave={e=>e.currentTarget.style.background=`${btn.color}10`}>
-                    <div style={{ display:"flex", alignItems:"center", gap:"0.4rem", fontWeight:"bold", fontSize:"0.85rem", marginBottom:"0.2rem" }}>
-                      <Icon name={btn.icon} size={14}/>{btn.label}
-                    </div>
-                    <div style={{ fontSize:"0.72rem", color:"#666" }}>{btn.desc}</div>
+          {!mode&&(
+            <div style={{marginTop:"1rem"}}>
+              <div style={{fontSize:"0.7rem",color:"#555",marginBottom:"0.6rem"}}>Was möchtest du tun?</div>
+              <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
+                {[{id:"erklaeren",icon:"lightbulb",label:"Thema erklären",color:"#eab308",desc:"Erklärung mit Beispielen"},{id:"abfragen",icon:"quiz",label:"Mich abfragen",color:"#a855f7",desc:"Prüfungsfragen stellen"},{id:"tipps",icon:"star",label:"Prüfungstipps",color:"#22c55e",desc:"Häufige Fallen"}].map(btn=>(
+                  <button key={btn.id} onClick={()=>startMode(btn.id)} style={{flex:"1",minWidth:"130px",padding:"0.75rem 1rem",background:`${btn.color}10`,border:`1px solid ${btn.color}30`,borderRadius:"10px",cursor:"pointer",color:btn.color,fontFamily:"inherit",textAlign:"left"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"0.4rem",fontWeight:"bold",fontSize:"0.82rem",marginBottom:"0.2rem"}}><Icon name={btn.icon} size={13}/>{btn.label}</div>
+                    <div style={{fontSize:"0.7rem",color:"#666"}}>{btn.desc}</div>
                   </button>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Modus wechseln Button */}
-          {mode && (
-            <div style={{ marginTop:"0.6rem", display:"flex", gap:"0.4rem" }}>
-              {[
-                { id:"erklaeren", icon:"lightbulb", label:"Erklären", color:"#eab308" },
-                { id:"abfragen",  icon:"quiz",      label:"Abfragen", color:"#a855f7" },
-                { id:"tipps",     icon:"star",      label:"Tipps",    color:"#22c55e" },
-              ].map(btn => (
-                <button key={btn.id} onClick={()=>{ setMessages([]); startMode(btn.id); }} style={{
-                  padding:"0.3rem 0.7rem", borderRadius:"20px", fontSize:"0.72rem",
-                  border:`1px solid ${mode===btn.id?btn.color:"#2a2a2a"}`,
-                  background:mode===btn.id?`${btn.color}18`:"transparent",
-                  color:mode===btn.id?btn.color:"#555", cursor:"pointer", fontFamily:"inherit",
-                  display:"flex", alignItems:"center", gap:"0.3rem"
-                }}>
+          {mode&&(
+            <div style={{marginTop:"0.6rem",display:"flex",gap:"0.4rem",flexWrap:"wrap"}}>
+              {[{id:"erklaeren",icon:"lightbulb",label:"Erklären",color:"#eab308"},{id:"abfragen",icon:"quiz",label:"Abfragen",color:"#a855f7"},{id:"tipps",icon:"star",label:"Tipps",color:"#22c55e"}].map(btn=>(
+                <button key={btn.id} onClick={()=>startMode(btn.id)} style={{padding:"0.3rem 0.7rem",borderRadius:"20px",fontSize:"0.72rem",border:`1px solid ${mode===btn.id?btn.color:"#2a2a2a"}`,background:mode===btn.id?`${btn.color}18`:"transparent",color:mode===btn.id?btn.color:"#555",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.3rem"}}>
                   <Icon name={btn.icon} size={11}/>{btn.label}
                 </button>
               ))}
-              <button onClick={()=>{ setMessages([]); setMode(null); }} style={{ padding:"0.3rem 0.7rem", borderRadius:"20px", fontSize:"0.72rem", border:"1px solid #2a2a2a", background:"transparent", color:"#555", cursor:"pointer", fontFamily:"inherit" }}>
-                ← Neu starten
-              </button>
+              <button onClick={()=>{setMessages([]);setMode(null);}} style={{padding:"0.3rem 0.7rem",borderRadius:"20px",fontSize:"0.72rem",border:"1px solid #2a2a2a",background:"transparent",color:"#555",cursor:"pointer",fontFamily:"inherit"}}>← Neu</button>
             </div>
           )}
         </div>
+        <div style={{flex:1,overflowY:"auto",padding:"1.25rem 1.5rem",display:"flex",flexDirection:"column",gap:"1rem"}}>
+          {messages.length===0&&!loading&&<div style={{textAlign:"center",padding:"3rem",color:"#333"}}><div style={{fontSize:"2.5rem",marginBottom:"0.5rem"}}>🤖</div><div style={{fontSize:"0.85rem"}}>Wähle einen Modus!</div></div>}
+          {messages.filter(m=>m.role==="assistant").length===0&&messages.length>0&&!loading&&null}
+          {messages.map((msg,i)=>(
+            msg.role==="user"?null:
+            <div key={i} style={{display:"flex",gap:"0.6rem"}}>
+              <div style={{width:"26px",height:"26px",background:`${col.badge}20`,border:`1px solid ${col.badge}30`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge,flexShrink:0,marginTop:"2px"}}><Icon name="bot" size={13}/></div>
+              <div style={{maxWidth:"90%",padding:"0.75rem 1rem",background:"#111",border:"1px solid #1e1e1e",borderRadius:"14px 14px 14px 4px",fontSize:"0.85rem",color:"#ccc",lineHeight:"1.7",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msg.content}</div>
+            </div>
+          ))}
+          {loading&&<div style={{display:"flex",gap:"0.6rem"}}><div style={{width:"26px",height:"26px",background:`${col.badge}20`,border:`1px solid ${col.badge}30`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge,flexShrink:0}}><Icon name="bot" size={13}/></div><div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:"14px 14px 14px 4px",padding:"0.75rem 1rem",display:"flex",gap:"4px",alignItems:"center"}}>{[0,1,2].map(n=><div key={n} style={{width:"6px",height:"6px",borderRadius:"50%",background:col.badge,animation:`bounce 1.2s infinite ${n*0.2}s`}}/>)}</div></div>}
+          <div ref={bottomRef}/>
+        </div>
+        {mode&&<div style={{padding:"1rem 1.5rem",borderTop:"1px solid #111",flexShrink:0,background:"#090909"}}>
+          <div style={{display:"flex",gap:"0.5rem"}}>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage(input);}}} placeholder="Deine Antwort oder Frage..." disabled={loading} style={{flex:1,background:"#0f0f0f",border:"1px solid #222",borderRadius:"10px",padding:"0.7rem 1rem",color:"#ddd",fontSize:"0.88rem",outline:"none",fontFamily:"inherit"}}/>
+            <button onClick={()=>sendMessage(input)} disabled={loading||!input.trim()} style={{background:input.trim()&&!loading?col.badge:"#1a1a1a",border:"none",borderRadius:"10px",padding:"0.7rem 1rem",cursor:input.trim()&&!loading?"pointer":"not-allowed",color:input.trim()&&!loading?"#fff":"#444",display:"flex",alignItems:"center",gap:"0.4rem",fontSize:"0.82rem",fontFamily:"inherit"}}><Icon name="send" size={15}/>Senden</button>
+          </div>
+          <div style={{fontSize:"0.65rem",color:"#333",marginTop:"0.4rem"}}>Enter zum Senden</div>
+        </div>}
+      </div>
+    </div>
+  );
+}
 
-        {/* Chat Nachrichten */}
-        <div style={{ flex:1, overflowY:"auto", padding:"1.25rem 1.5rem", display:"flex", flexDirection:"column", gap:"1rem" }}>
-          {messages.length === 0 && !loading && (
-            <div style={{ textAlign:"center", padding:"3rem 1rem", color:"#333" }}>
-              <div style={{ fontSize:"2.5rem", marginBottom:"0.5rem" }}>🤖</div>
-              <div style={{ fontSize:"0.85rem" }}>Wähle einen Modus oben um zu starten!</div>
+// ── Prüfungs Modal ────────────────────────────────────────────────────────────
+function PruefungModal({ item, onClose }) {
+  const [step,setStep]=useState("config"); // config | loading | pruefung | ergebnis
+  const [anzahl,setAnzahl]=useState(5);
+  const [schwierigkeit,setSchwierigkeit]=useState("Mittel");
+  const [questions,setQuestions]=useState([]);
+  const [answers,setAnswers]=useState({});
+  const [submitted,setSubmitted]=useState(false);
+  const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
+
+  const generatePruefung=async()=>{
+    setStep("loading");
+    const systemPrompt=`Du bist ein IHK-Pruefungsersteller fuer Fachinformatiker Systemintegration. Erstelle Multiple-Choice Fragen auf Deutsch. Antworte NUR mit validem JSON, kein Text davor oder danach.`;
+    const userMsg=`Erstelle ${anzahl} Multiple-Choice Pruefungsfragen zum Thema "${item.title}" (${item.category}), Schwierigkeit: ${schwierigkeit}.
+Inhalt: ${(item.content||"").substring(0,2000)}
+
+Antworte NUR mit diesem JSON-Format (kein Markdown, kein Text):
+[{"question":"Frage?","options":["A","B","C","D"],"correct":0,"explanation":"Erklaerung warum A richtig ist"}]
+
+correct ist der Index (0-3) der richtigen Antwort.`;
+    try {
+      const reply = await callKI([{role:"user",content:userMsg}],systemPrompt);
+      const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
+      const parsed = JSON.parse(clean);
+      setQuestions(parsed);
+      setAnswers({});
+      setSubmitted(false);
+      setStep("pruefung");
+    } catch(e) {
+      alert("Fehler beim Generieren: "+e.message);
+      setStep("config");
+    }
+  };
+
+  const score=questions.filter((q,i)=>answers[i]===q.correct).length;
+  const percent=questions.length>0?Math.round((score/questions.length)*100):0;
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#080808",border:`1px solid ${col.badge}40`,borderRadius:"16px",width:"100%",maxWidth:"760px",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"1rem 1.5rem",borderBottom:`1px solid ${col.badge}20`,background:`linear-gradient(135deg,${col.bg}cc,#080808)`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:"0.7rem",color:col.badge,fontWeight:"bold",letterSpacing:"0.1em"}}>📝 PRÜFUNG ERSTELLEN</div>
+            <div style={{fontSize:"0.9rem",color:"#ccc",fontFamily:"'Courier New',monospace",fontWeight:"bold"}}>{item.title}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:"#555"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name="close" size={16}/></button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"1.5rem"}}>
+
+          {/* Konfiguration */}
+          {step==="config"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:"1.5rem"}}>
+              <div>
+                <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.6rem"}}>ANZAHL FRAGEN</div>
+                <div style={{display:"flex",gap:"0.5rem"}}>
+                  {[5,10,15].map(n=>(
+                    <button key={n} onClick={()=>setAnzahl(n)} style={{flex:1,padding:"0.75rem",borderRadius:"10px",border:anzahl===n?`1px solid ${col.badge}`:"1px solid #2a2a2a",background:anzahl===n?`${col.badge}18`:"transparent",color:anzahl===n?col.badge:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"1rem",fontWeight:"bold"}}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.6rem"}}>SCHWIERIGKEIT</div>
+                <div style={{display:"flex",gap:"0.5rem"}}>
+                  {[{l:"Leicht",c:"#22c55e"},{l:"Mittel",c:"#eab308"},{l:"Schwer",c:"#ef4444"}].map(s=>(
+                    <button key={s.l} onClick={()=>setSchwierigkeit(s.l)} style={{flex:1,padding:"0.75rem",borderRadius:"10px",border:schwierigkeit===s.l?`1px solid ${s.c}`:"1px solid #2a2a2a",background:schwierigkeit===s.l?`${s.c}18`:"transparent",color:schwierigkeit===s.l?s.c:"#666",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold"}}>{s.l}</button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={generatePruefung} style={{padding:"1rem",borderRadius:"12px",background:col.badge,border:"none",color:"#fff",fontSize:"1rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
+                <Icon name="pruefung" size={18}/>Prüfung generieren ({anzahl} Fragen · {schwierigkeit})
+              </button>
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <div key={i} style={{ display:"flex", justifyContent:msg.role==="user"?"flex-end":"flex-start" }}>
-              {msg.role==="assistant" && (
-                <div style={{ width:"26px", height:"26px", background:`${col.badge}20`, border:`1px solid ${col.badge}30`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:col.badge, flexShrink:0, marginRight:"0.6rem", marginTop:"2px" }}>
-                  <Icon name="bot" size={13}/>
+          {/* Loading */}
+          {step==="loading"&&(
+            <div style={{textAlign:"center",padding:"4rem"}}>
+              <div style={{fontSize:"3rem",marginBottom:"1rem"}}>⚙️</div>
+              <div style={{color:"#888",fontSize:"0.9rem"}}>KI generiert {anzahl} Fragen...</div>
+              <div style={{display:"flex",gap:"6px",justifyContent:"center",marginTop:"1rem"}}>
+                {[0,1,2].map(n=><div key={n} style={{width:"8px",height:"8px",borderRadius:"50%",background:col.badge,animation:`bounce 1.2s infinite ${n*0.2}s`}}/>)}
+              </div>
+            </div>
+          )}
+
+          {/* Prüfung */}
+          {step==="pruefung"&&(
+            <div>
+              {!submitted&&<div style={{background:"#0a1a2e",border:"1px solid #1a3a5a",borderRadius:"10px",padding:"0.75rem 1rem",marginBottom:"1.5rem",fontSize:"0.82rem",color:"#60a5fa"}}>
+                📋 {questions.length} Fragen · {anzahl} Minuten empfohlen · Alle beantworten dann abgeben
+              </div>}
+              {submitted&&(
+                <div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:percent>=80?"#0a2e1a":percent>=50?"#2e2a00":"#2e0a0a",border:`1px solid ${percent>=80?"#22c55e":percent>=50?"#eab308":"#ef4444"}`}}>
+                  <div style={{fontSize:"2.5rem",fontWeight:"bold",color:percent>=80?"#22c55e":percent>=50?"#eab308":"#ef4444"}}>{score}/{questions.length}</div>
+                  <div style={{fontSize:"1.2rem",color:percent>=80?"#22c55e":percent>=50?"#eab308":"#ef4444",fontWeight:"bold"}}>{percent}% · {percent>=80?"Bestanden ✓":percent>=50?"Knapp ⚠️":"Nicht bestanden ✗"}</div>
+                  <div style={{display:"flex",gap:"0.75rem",justifyContent:"center",marginTop:"1rem",flexWrap:"wrap"}}>
+                    <button onClick={()=>{setStep("config");setQuestions([]);setAnswers({});setSubmitted(false);}} style={{padding:"0.5rem 1rem",borderRadius:"8px",background:"#fff",color:"#000",border:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.85rem"}}>🔄 Neue Prüfung</button>
+                    <button onClick={()=>generatePruefungPDF(item,questions,answers,submitted)} style={{padding:"0.5rem 1rem",borderRadius:"8px",background:"none",border:"1px solid #ef4444",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:"0.85rem",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="pdf" size={14}/>Als PDF</button>
+                  </div>
                 </div>
               )}
-              <div style={{
-                maxWidth:"82%", padding:"0.75rem 1rem",
-                background: msg.role==="user" ? "#1a1a2e" : "#111",
-                border: msg.role==="user" ? "1px solid #2a2a4a" : "1px solid #1e1e1e",
-                borderRadius: msg.role==="user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                fontSize:"0.85rem", color:"#ccc", lineHeight:"1.7",
-                whiteSpace:"pre-wrap", wordBreak:"break-word",
-                fontFamily: msg.role==="assistant" ? "'Segoe UI',system-ui,sans-serif" : "inherit"
-              }}>
-                {msg.content}
+              {questions.map((q,i)=>{
+                const isAnswered=answers[i]!==undefined;
+                const isCorrect=submitted&&answers[i]===q.correct;
+                const isWrong=submitted&&isAnswered&&!isCorrect;
+                return(
+                  <div key={i} style={{marginBottom:"1.25rem",padding:"1rem 1.25rem",background:submitted?(isCorrect?"#0a2e1a":isWrong?"#2e0a0a":"#111"):"#111",border:`1px solid ${submitted?(isCorrect?"#22c55e":isWrong?"#ef4444":"#1e1e1e"):"#1e1e1e"}`,borderRadius:"12px"}}>
+                    <div style={{fontSize:"0.88rem",fontWeight:"bold",color:submitted?(isCorrect?"#22c55e":isWrong?"#ef4444":"#ccc"):"#ccc",marginBottom:"0.75rem",lineHeight:1.4}}>
+                      {submitted&&<span style={{marginRight:"0.4rem"}}>{isCorrect?"✅":"❌"}</span>}{i+1}. {q.question}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
+                      {q.options.map((opt,j)=>{
+                        const isSelected=answers[i]===j;
+                        const isRight=submitted&&j===q.correct;
+                        const isSelectedWrong=submitted&&isSelected&&j!==q.correct;
+                        return(
+                          <button key={j} onClick={()=>!submitted&&setAnswers(a=>({...a,[i]:j}))} style={{padding:"0.6rem 0.9rem",borderRadius:"8px",border:`1px solid ${isRight?"#22c55e":isSelectedWrong?"#ef4444":isSelected?"#3b82f6":"#2a2a2a"}`,background:isRight?"#0a2e1a":isSelectedWrong?"#2e0a0a":isSelected?"#0a1a2e":"#0a0a0a",color:isRight?"#22c55e":isSelectedWrong?"#ef4444":isSelected?"#60a5fa":"#888",cursor:submitted?"default":"pointer",textAlign:"left",fontFamily:"inherit",fontSize:"0.82rem",transition:"all 0.15s"}}>
+                            <strong>{String.fromCharCode(65+j)})</strong> {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {submitted&&isWrong&&q.explanation&&<div style={{marginTop:"0.75rem",padding:"0.6rem 0.9rem",background:"#0a1228",border:"1px solid #1a3a5a",borderRadius:"8px",fontSize:"0.78rem",color:"#93c5fd"}}>💡 {q.explanation}</div>}
+                  </div>
+                );
+              })}
+              {!submitted&&questions.length>0&&(
+                <button onClick={()=>setSubmitted(true)} disabled={Object.keys(answers).length<questions.length} style={{width:"100%",padding:"1rem",borderRadius:"12px",background:Object.keys(answers).length>=questions.length?"#22c55e":"#1a1a1a",border:"none",color:Object.keys(answers).length>=questions.length?"#000":"#555",fontSize:"1rem",fontWeight:"bold",cursor:Object.keys(answers).length>=questions.length?"pointer":"not-allowed",fontFamily:"inherit",marginTop:"0.5rem"}}>
+                  {Object.keys(answers).length<questions.length?`Noch ${questions.length-Object.keys(answers).length} Fragen offen`:"Prüfung abgeben ✓"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── YouTube Modal ─────────────────────────────────────────────────────────────
+function YouTubeModal({ item, onClose, onSave }) {
+  const [url,setUrl]=useState("");
+  const [title,setTitle]=useState("");
+  const [videos,setVideos]=useState(item.youtube_links||[]);
+  const [saved,setSaved]=useState(false);
+  const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
+
+  const addVideo=()=>{
+    const id=getYouTubeId(url);
+    if(!id){ alert("Ungültige YouTube-URL!"); return; }
+    const newVideos=[...videos,{url,title:title||"Video",id}];
+    setVideos(newVideos);
+    setUrl(""); setTitle("");
+  };
+  const removeVideo=(i)=>setVideos(v=>v.filter((_,j)=>j!==i));
+
+  const handleSave=async()=>{
+    await supabase.from(TABLE).update({youtube_links:videos}).eq("id",item.id);
+    onSave({...item,youtube_links:videos});
+    setSaved(true);
+    setTimeout(()=>{ setSaved(false); onClose(); },800);
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"700px",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"1rem 1.5rem",borderBottom:`1px solid ${col.badge}18`,background:`linear-gradient(135deg,${col.bg}cc,#080808)`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:"0.7rem",color:"#ef4444",fontWeight:"bold",letterSpacing:"0.1em"}}>🎬 YOUTUBE VIDEOS</div>
+            <div style={{fontSize:"0.9rem",color:"#ccc",fontFamily:"'Courier New',monospace",fontWeight:"bold"}}>{item.title}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:"#555"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name="close" size={16}/></button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"1rem"}}>
+          {/* URL hinzufügen */}
+          <div style={{background:"#0f0f0f",border:"1px solid #1e1e1e",borderRadius:"12px",padding:"1rem",display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+            <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em"}}>VIDEO HINZUFÜGEN</div>
+            <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="YouTube URL (z.B. https://youtu.be/xyz)" style={{width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.65rem 1rem",color:"#ddd",fontSize:"0.88rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Titel (optional, z.B. 'OSI-Modell einfach erklärt')" style={{width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.65rem 1rem",color:"#ddd",fontSize:"0.88rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            <button onClick={addVideo} disabled={!url.trim()} style={{padding:"0.65rem",borderRadius:"8px",background:url.trim()?"#ef4444":"#1a1a1a",border:"none",color:url.trim()?"#fff":"#555",cursor:url.trim()?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.85rem",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem"}}>
+              <Icon name="youtube" size={15}/>Video hinzufügen
+            </button>
+          </div>
+
+          {/* Videos Liste */}
+          {videos.length===0&&<div style={{textAlign:"center",padding:"2rem",color:"#333",fontSize:"0.85rem"}}>🎬 Noch keine Videos verlinkt</div>}
+          {videos.map((v,i)=>(
+            <div key={i} style={{background:"#0f0f0f",border:"1px solid #1e1e1e",borderRadius:"12px",overflow:"hidden"}}>
+              <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
+                <iframe src={`https://www.youtube.com/embed/${v.id}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>
+              </div>
+              <div style={{padding:"0.75rem 1rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:"0.85rem",color:"#ccc",fontWeight:"bold"}}>{v.title}</div>
+                <button onClick={()=>removeVideo(i)} style={{background:"none",border:"1px solid #2a2a2a",borderRadius:"6px",padding:"0.3rem 0.6rem",cursor:"pointer",color:"#666",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem"}} onMouseEnter={e=>e.currentTarget.style.color="#ef4444"} onMouseLeave={e=>e.currentTarget.style.color="#666"}><Icon name="trash" size={12}/>Entfernen</button>
               </div>
             </div>
           ))}
 
-          {loading && (
-            <div style={{ display:"flex", alignItems:"center", gap:"0.6rem" }}>
-              <div style={{ width:"26px", height:"26px", background:`${col.badge}20`, border:`1px solid ${col.badge}30`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:col.badge, flexShrink:0 }}>
-                <Icon name="bot" size={13}/>
-              </div>
-              <div style={{ background:"#111", border:"1px solid #1e1e1e", borderRadius:"14px 14px 14px 4px", padding:"0.75rem 1rem" }}>
-                <div style={{ display:"flex", gap:"4px", alignItems:"center" }}>
-                  {[0,1,2].map(n=>(
-                    <div key={n} style={{ width:"6px", height:"6px", borderRadius:"50%", background:col.badge, animation:`bounce 1.2s infinite ${n*0.2}s` }}/>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef}/>
+          <button onClick={handleSave} style={{padding:"0.9rem",borderRadius:"10px",background:saved?"#0a1a0a":"#fff",border:saved?"1px solid #22c55e":"none",color:saved?"#22c55e":"#000",fontSize:"0.88rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
+            {saved?<><Icon name="check" size={15}/>GESPEICHERT!</>:<><Icon name="check" size={15}/>Videos speichern</>}
+          </button>
         </div>
-
-        {/* Input */}
-        {mode && (
-          <div style={{ padding:"1rem 1.5rem", borderTop:"1px solid #111", flexShrink:0, background:"#090909" }}>
-            <div style={{ display:"flex", gap:"0.5rem" }}>
-              <input
-                value={input}
-                onChange={e=>setInput(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendMessage(input); }}}
-                placeholder="Deine Antwort oder Frage..."
-                disabled={loading}
-                style={{ flex:1, background:"#0f0f0f", border:"1px solid #222", borderRadius:"10px", padding:"0.7rem 1rem", color:"#ddd", fontSize:"0.88rem", outline:"none", fontFamily:"inherit" }}
-              />
-              <button onClick={()=>sendMessage(input)} disabled={loading||!input.trim()} style={{
-                background: input.trim()&&!loading ? col.badge : "#1a1a1a",
-                border:"none", borderRadius:"10px", padding:"0.7rem 1rem",
-                cursor: input.trim()&&!loading ? "pointer":"not-allowed",
-                color: input.trim()&&!loading ? "#fff":"#444",
-                display:"flex", alignItems:"center", gap:"0.4rem",
-                fontSize:"0.82rem", fontFamily:"inherit", transition:"all 0.2s"
-              }}>
-                <Icon name="send" size={15}/> Senden
-              </button>
-            </div>
-            <div style={{ fontSize:"0.65rem", color:"#333", marginTop:"0.4rem" }}>Enter zum Senden · Shift+Enter für neue Zeile</div>
-          </div>
-        )}
       </div>
-
-      <style>{`@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}`}</style>
     </div>
   );
 }
@@ -358,7 +520,7 @@ function UploadModal({ onClose, onRefresh }) {
     try{
       let fp=null,fn=null,fs=null,ft=null;
       if(tab==="file"&&file){const path=`${Date.now()}_${file.name.replace(/\s+/g,"_")}`;const{error:e}=await supabase.storage.from(BUCKET).upload(path,file);if(e)throw e;fp=path;fn=file.name;fs=file.size;ft=file.name.split(".").pop().toLowerCase();}
-      const{error:e}=await supabase.from(TABLE).insert({title:title.trim(),category,content:tab==="text"?content.trim():null,tags:tags.split(",").map(t=>t.trim()).filter(Boolean),author:author.trim()||"Anonym",file_path:fp,file_name:fn,file_size:fs,file_type:ft,type:tab,starred:false});
+      const{error:e}=await supabase.from(TABLE).insert({title:title.trim(),category,content:tab==="text"?content.trim():null,tags:tags.split(",").map(t=>t.trim()).filter(Boolean),author:author.trim()||"Anonym",file_path:fp,file_name:fn,file_size:fs,file_type:ft,type:tab,starred:false,youtube_links:[]});
       if(e)throw e;
       setDone(true);setTimeout(()=>{onRefresh();onClose();},1000);
     }catch(e){setError("Fehler: "+e.message);}
@@ -410,30 +572,31 @@ function UploadModal({ onClose, onRefresh }) {
 }
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
-function DetailModal({ item, onClose, onDelete, onStar, onKI }) {
+function DetailModal({ item, onClose, onDelete, onStar, onKI, onPruefung, onYouTube }) {
   const [downloading,setDownloading]=useState(false);
   const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
   const fi=item.file_name?getFileInfo(item.file_name):null;
   const handleDownloadFile=async()=>{setDownloading(true);try{const{data,error}=await supabase.storage.from(BUCKET).download(item.file_path);if(error)throw error;const a=document.createElement("a");a.href=URL.createObjectURL(data);a.download=item.file_name;a.click();}catch(e){alert("Fehler: "+e.message);}setDownloading(false);};
   const handleViewFile=async()=>{const{data}=await supabase.storage.from(BUCKET).getPublicUrl(item.file_path);window.open(data.publicUrl,"_blank");};
+  const videos=item.youtube_links||[];
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
-      <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"800px",maxHeight:"93vh",overflow:"auto"}}>
+      <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"820px",maxHeight:"93vh",overflow:"auto"}}>
         <div style={{padding:"1.25rem 1.75rem",borderBottom:`1px solid ${col.badge}18`,background:`linear-gradient(135deg,${col.bg}bb,#080808)`,position:"sticky",top:0,zIndex:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"1rem"}}>
             <div style={{flex:1}}>
               <div style={{display:"flex",gap:"0.5rem",marginBottom:"0.4rem",flexWrap:"wrap"}}>
                 <span style={{fontSize:"0.58rem",letterSpacing:"0.2em",color:col.badge,background:`${col.badge}12`,padding:"0.18rem 0.5rem",borderRadius:"4px",border:`1px solid ${col.badge}25`,fontWeight:"bold"}}>{item.category.toUpperCase()}</span>
                 {fi&&<span style={{fontSize:"0.58rem",color:fi.color,background:`${fi.color}12`,padding:"0.18rem 0.5rem",borderRadius:"4px",border:`1px solid ${fi.color}25`,fontWeight:"bold"}}>{fi.icon} {fi.label}</span>}
+                {videos.length>0&&<span style={{fontSize:"0.58rem",color:"#ef4444",background:"#ef444412",padding:"0.18rem 0.5rem",borderRadius:"4px",border:"1px solid #ef444425",fontWeight:"bold"}}>🎬 {videos.length} Video{videos.length>1?"s":""}</span>}
               </div>
               <div style={{fontSize:"1.2rem",fontWeight:"bold",color:"#eee",fontFamily:"'Courier New',monospace",lineHeight:1.3}}>{item.title}</div>
               <div style={{fontSize:"0.7rem",color:"#444",marginTop:"0.3rem"}}>von {item.author} · {new Date(item.created_at).toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"})}</div>
             </div>
             <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",justifyContent:"flex-end"}}>
-              {/* KI Hilfe Button */}
-              <button onClick={onKI} style={{background:`${col.badge}15`,border:`1px solid ${col.badge}40`,borderRadius:"7px",padding:"0.4rem 0.8rem",cursor:"pointer",color:col.badge,fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}>
-                <Icon name="bot" size={13}/>🤖 KI Hilfe
-              </button>
+              <button onClick={onKI} style={{background:`${col.badge}15`,border:`1px solid ${col.badge}40`,borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:col.badge,fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}><Icon name="bot" size={13}/>KI Hilfe</button>
+              {item.type==="text"&&<button onClick={onPruefung} style={{background:"#2a200015",border:"1px solid #eab30840",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#eab308",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}><Icon name="pruefung" size={13}/>Prüfung</button>}
+              <button onClick={onYouTube} style={{background:"#ef444415",border:"1px solid #ef444440",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#ef4444",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}><Icon name="youtube" size={13}/>Videos</button>
               {item.type==="text"&&<>
                 <button onClick={()=>generatePDF(item)} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#ef4444",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit"}}><Icon name="pdf" size={13}/>PDF</button>
                 <button onClick={()=>generateDOCX(item)} style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit"}}><Icon name="word" size={13}/>Word</button>
@@ -450,13 +613,27 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI }) {
           {item.tags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"0.35rem",marginTop:"0.65rem"}}>{item.tags.map(t=><span key={t} style={{fontSize:"0.65rem",color:"#666",background:"#0f0f0f",padding:"0.12rem 0.4rem",borderRadius:"4px",border:"1px solid #1a1a1a"}}>#{t}</span>)}</div>}
         </div>
         <div style={{padding:"1.75rem"}}>
-          {item.type==="text"?<div style={{fontFamily:"'Courier New',monospace",fontSize:"0.87rem",color:"#b0b0b0",lineHeight:"1.9",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{item.content}</div>
-          :<div style={{textAlign:"center",padding:"3rem 1rem"}}>
+          {item.type==="text"&&<div style={{fontFamily:"'Courier New',monospace",fontSize:"0.87rem",color:"#b0b0b0",lineHeight:"1.9",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{item.content}</div>}
+          {item.type==="file"&&<div style={{textAlign:"center",padding:"2rem"}}>
             <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{fi?.icon||"📎"}</div>
             <div style={{fontSize:"1rem",color:"#aaa",fontWeight:"bold",marginBottom:"0.5rem"}}>{item.file_name}</div>
             <div style={{display:"flex",gap:"1rem",justifyContent:"center",flexWrap:"wrap",marginTop:"1.5rem"}}>
               <button onClick={handleViewFile} style={{display:"flex",alignItems:"center",gap:"0.5rem",background:"#0a1a0a",border:"1px solid #22c55e",borderRadius:"10px",padding:"0.75rem 1.5rem",color:"#22c55e",fontSize:"0.85rem",cursor:"pointer",fontFamily:"inherit"}}><Icon name="eye" size={16}/>Im Browser öffnen</button>
               <button onClick={handleDownloadFile} disabled={downloading} style={{display:"flex",alignItems:"center",gap:"0.5rem",background:"#0a1228",border:"1px solid #3b82f6",borderRadius:"10px",padding:"0.75rem 1.5rem",color:"#3b82f6",fontSize:"0.85rem",cursor:"pointer",fontFamily:"inherit"}}><Icon name="download" size={16}/>{downloading?"Lädt...":"Herunterladen"}</button>
+            </div>
+          </div>}
+          {/* YouTube Videos */}
+          {videos.length>0&&<div style={{marginTop:"1.5rem"}}>
+            <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.75rem"}}>🎬 YOUTUBE VIDEOS</div>
+            <div style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
+              {videos.map((v,i)=>(
+                <div key={i} style={{borderRadius:"10px",overflow:"hidden",border:"1px solid #1e1e1e"}}>
+                  <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
+                    <iframe src={`https://www.youtube.com/embed/${v.id}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>
+                  </div>
+                  <div style={{padding:"0.5rem 0.75rem",background:"#0f0f0f",fontSize:"0.8rem",color:"#888"}}>{v.title}</div>
+                </div>
+              ))}
             </div>
           </div>}
         </div>
@@ -470,14 +647,11 @@ function SideSection({ title, children, defaultOpen=true }) {
   const [open,setOpen]=useState(defaultOpen);
   return(
     <div style={{marginBottom:"4px"}}>
-      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.35rem 0.5rem",background:"none",border:"none",cursor:"pointer",color:"#3a3a3a",fontSize:"0.58rem",letterSpacing:"0.18em",fontFamily:"inherit"}}
-        onMouseEnter={e=>e.currentTarget.style.color="#666"} onMouseLeave={e=>e.currentTarget.style.color="#3a3a3a"}>
+      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.35rem 0.5rem",background:"none",border:"none",cursor:"pointer",color:"#3a3a3a",fontSize:"0.58rem",letterSpacing:"0.18em",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#666"} onMouseLeave={e=>e.currentTarget.style.color="#3a3a3a"}>
         <span>{title}</span>
         <div style={{transform:open?"rotate(0deg)":"rotate(-90deg)",transition:"transform 0.2s"}}><Icon name="chevron" size={12}/></div>
       </button>
-      <div style={{overflow:"hidden",maxHeight:open?"1000px":"0px",transition:"max-height 0.3s ease",display:"flex",flexDirection:"column",gap:"2px"}}>
-        {children}
-      </div>
+      <div style={{overflow:"hidden",maxHeight:open?"1000px":"0px",transition:"max-height 0.3s ease",display:"flex",flexDirection:"column",gap:"2px"}}>{children}</div>
     </div>
   );
 }
@@ -489,6 +663,8 @@ export default function App() {
   const [showUpload,setShowUpload]=useState(false);
   const [selected,setSelected]=useState(null);
   const [kiItem,setKiItem]=useState(null);
+  const [pruefungItem,setPruefungItem]=useState(null);
+  const [youtubeItem,setYoutubeItem]=useState(null);
   const [search,setSearch]=useState("");
   const [filterCat,setFilterCat]=useState("Alle");
   const [filterType,setFilterType]=useState("Alle");
@@ -509,6 +685,7 @@ export default function App() {
   useEffect(()=>{loadItems();},[]);
   const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
   const handleStar=async(id,starred)=>{await supabase.from(TABLE).update({starred}).eq("id",id);setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));};
+  const handleYouTubeSave=(updatedItem)=>{setItems(p=>p.map(i=>i.id===updatedItem.id?updatedItem:i));if(selected?.id===updatedItem.id)setSelected(updatedItem);};
 
   const filtered=items.filter(i=>{
     const q=search.toLowerCase();
@@ -633,6 +810,7 @@ export default function App() {
                 const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
                 const fi=item.file_name?getFileInfo(item.file_name):null;
                 const preview=item.type==="text"?(item.content||"").slice(0,120)+"…":item.file_name;
+                const videos=item.youtube_links||[];
                 return(
                   <div key={item.id} className="card" style={{background:`linear-gradient(150deg,${col.bg}cc,#0a0a0a)`,border:`1px solid ${col.badge}18`,borderRadius:"12px",padding:"1.1rem",position:"relative",overflow:"hidden"}}>
                     <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:`linear-gradient(90deg,${col.badge},transparent 70%)`}}/>
@@ -640,18 +818,18 @@ export default function App() {
                     <div style={{display:"flex",gap:"0.4rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
                       <span style={{fontSize:"0.56rem",letterSpacing:"0.18em",color:col.badge,background:`${col.badge}10`,padding:"0.16rem 0.45rem",borderRadius:"4px",border:`1px solid ${col.badge}22`,fontWeight:"bold"}}>{item.category.toUpperCase()}</span>
                       {fi&&<span style={{fontSize:"0.56rem",color:fi.color,background:`${fi.color}10`,padding:"0.16rem 0.45rem",borderRadius:"4px",border:`1px solid ${fi.color}22`,fontWeight:"bold"}}>{fi.icon} {fi.label}</span>}
+                      {videos.length>0&&<span style={{fontSize:"0.56rem",color:"#ef4444",background:"#ef444410",padding:"0.16rem 0.45rem",borderRadius:"4px",border:"1px solid #ef444422",fontWeight:"bold"}}>🎬 {videos.length}</span>}
                     </div>
                     <div onClick={()=>setSelected(item)} style={{fontFamily:"'Courier New',monospace",fontSize:"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
                     <div onClick={()=>setSelected(item)} style={{fontSize:"0.74rem",color:"#4a4a4a",lineHeight:"1.6",fontFamily:"'Courier New',monospace"}}>{preview}</div>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"0.85rem",paddingTop:"0.65rem",borderTop:`1px solid ${col.badge}10`}}>
-                      <div style={{display:"flex",gap:"0.3rem",flexWrap:"wrap"}}>
-                        {/* KI Button auf Karte */}
-                        <button onClick={e=>{e.stopPropagation();setKiItem(item);}} style={{background:`${col.badge}12`,border:`1px solid ${col.badge}30`,borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:col.badge,fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem",fontWeight:"bold"}}>
-                          <Icon name="bot" size={10}/>🤖
-                        </button>
+                      <div style={{display:"flex",gap:"0.25rem",flexWrap:"wrap"}}>
+                        <button onClick={e=>{e.stopPropagation();setKiItem(item);}} style={{background:`${col.badge}12`,border:`1px solid ${col.badge}30`,borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:col.badge,fontSize:"0.62rem",display:"flex",alignItems:"center",gap:"0.2rem",fontWeight:"bold"}}>🤖</button>
+                        {item.type==="text"&&<button onClick={e=>{e.stopPropagation();setPruefungItem(item);}} style={{background:"#eab30812",border:"1px solid #eab30830",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#eab308",fontSize:"0.62rem"}}>📝</button>}
+                        <button onClick={e=>{e.stopPropagation();setYoutubeItem(item);}} style={{background:"#ef444412",border:"1px solid #ef444430",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#ef4444",fontSize:"0.62rem"}}>🎬</button>
                         {item.type==="text"&&<>
-                          <button onClick={e=>{e.stopPropagation();generatePDF(item);}} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#ef4444",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="pdf" size={11}/>PDF</button>
-                          <button onClick={e=>{e.stopPropagation();generateDOCX(item);}} style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="word" size={11}/>Word</button>
+                          <button onClick={e=>{e.stopPropagation();generatePDF(item);}} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#ef4444",fontSize:"0.62rem"}}><Icon name="pdf" size={10}/></button>
+                          <button onClick={e=>{e.stopPropagation();generateDOCX(item);}} style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.62rem"}}><Icon name="word" size={10}/></button>
                         </>}
                       </div>
                       <span onClick={()=>setSelected(item)} style={{fontSize:"0.6rem",color:"#2a2a2a"}}>{item.author}</span>
@@ -665,8 +843,10 @@ export default function App() {
       </div>
 
       {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onRefresh={loadItems}/>}
-      {selected&&<DetailModal item={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}}/>}
+      {selected&&<DetailModal item={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onPruefung={()=>{setPruefungItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
       {kiItem&&<KIChatModal item={kiItem} onClose={()=>setKiItem(null)}/>}
+      {pruefungItem&&<PruefungModal item={pruefungItem} onClose={()=>setPruefungItem(null)}/>}
+      {youtubeItem&&<YouTubeModal item={youtubeItem} onClose={()=>setYoutubeItem(null)} onSave={handleYouTubeSave}/>}
     </div>
   );
 }
