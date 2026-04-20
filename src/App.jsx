@@ -137,12 +137,10 @@ Deine Regeln:
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
           system: systemPrompt,
           messages: newMessages,
         })
