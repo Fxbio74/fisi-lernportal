@@ -33,7 +33,6 @@ const FILE_ICONS = {
 function getFileInfo(f){ const e=f.split(".").pop().toLowerCase(); return FILE_ICONS[e]||{icon:"📎",color:"#888",label:e.toUpperCase()}; }
 function formatBytes(b){ if(!b)return""; if(b<1024)return b+" B"; if(b<1048576)return(b/1024).toFixed(1)+" KB"; return(b/1048576).toFixed(1)+" MB"; }
 
-// ── PDF Generator ─────────────────────────────────────────────────────────────
 function generatePDF(item) {
   const date = new Date(item.created_at).toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
   const content = (item.content||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -41,10 +40,8 @@ function generatePDF(item) {
 <style>@page{margin:2cm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a}
 .header{background:#1F4E79;color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:20px}
 .header .cat{font-size:8pt;letter-spacing:2px;color:#90cdf4;margin-bottom:6px;font-weight:bold}
-.header h1{font-size:18pt;font-weight:bold;margin-bottom:6px}
-.header .meta{font-size:9pt;color:#bfdbfe}
-.tags{margin:12px 0;display:flex;flex-wrap:wrap;gap:6px}
-.tag{background:#EEF4FF;color:#1F4E79;padding:3px 8px;border-radius:4px;font-size:9pt;border:1px solid #BFDBFE}
+.header h1{font-size:18pt;font-weight:bold;margin-bottom:6px}.header .meta{font-size:9pt;color:#bfdbfe}
+.tags{margin:12px 0;display:flex;flex-wrap:wrap;gap:6px}.tag{background:#EEF4FF;color:#1F4E79;padding:3px 8px;border-radius:4px;font-size:9pt;border:1px solid #BFDBFE}
 .content{background:#f8f9fa;border:1px solid #e2e8f0;border-radius:8px;padding:20px 24px;border-left:4px solid #2E75B6}
 .content pre{font-family:"Courier New",monospace;font-size:10pt;white-space:pre-wrap;word-break:break-word;line-height:1.8}
 .footer{margin-top:20px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:8pt;color:#888;display:flex;justify-content:space-between}
@@ -55,46 +52,30 @@ ${(item.tags||[]).length?`<div class="tags">${(item.tags||[]).map(t=>`<span clas
 <div class="content"><pre>${content}</pre></div>
 <div class="footer"><span>FISI Lernportal · IHK Heilbronn · Prüfung Mai 2026</span><span>${date}</span></div>
 </body></html>`;
-  const win = window.open(URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"})),"_blank");
-  if(win) win.onload = () => setTimeout(()=>win.print(),500);
+  const win=window.open(URL.createObjectURL(new Blob([html],{type:"text/html;charset=utf-8"})),"_blank");
+  if(win) win.onload=()=>setTimeout(()=>win.print(),500);
 }
 
-// ── DOCX Generator ────────────────────────────────────────────────────────────
 function generateDOCX(item) {
-  const date = new Date(item.created_at).toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
-  const tags = (item.tags||[]).map(t=>"#"+t).join("  ");
-  const lines = (item.content||"").split("\n").map(l=>{
+  const date=new Date(item.created_at).toLocaleDateString("de-DE",{day:"2-digit",month:"long",year:"numeric"});
+  const tags=(item.tags||[]).map(t=>"#"+t).join("  ");
+  const lines=(item.content||"").split("\n").map(l=>{
     const e=l.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     return `<w:p><w:r><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${e}</w:t></w:r></w:p>`;
   }).join("\n");
   const docxml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
-<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="36"/><w:color w:val="1F4E79"/></w:rPr><w:t>${item.title.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</w:t></w:r></w:p>
+<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:sz w:val="36"/><w:color w:val="1F4E79"/></w:rPr><w:t>${item.title.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</w:t></w:r></w:p>
 <w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/><w:color w:val="888888"/></w:rPr><w:t xml:space="preserve">${item.category} · von ${item.author} · ${date}</w:t></w:r></w:p>
 ${tags?`<w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/><w:color w:val="2E75B6"/></w:rPr><w:t xml:space="preserve">${tags.replace(/&/g,"&amp;")}</w:t></w:r></w:p>`:""}
-<w:p><w:r><w:t></w:t></w:r></w:p>
-${lines}
-<w:p><w:r><w:t></w:t></w:r></w:p>
+<w:p><w:r><w:t></w:t></w:r></w:p>${lines}
 <w:p><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="16"/><w:color w:val="AAAAAA"/></w:rPr><w:t>FISI Lernportal · IHK Heilbronn · Pruefung Mai 2026</w:t></w:r></w:p>
 <w:sectPr><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`;
   const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
   const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
-  const doZip=()=>{
-    const zip=new window.JSZip();
-    zip.file("[Content_Types].xml",ct);
-    zip.file("_rels/.rels",rels);
-    zip.file("word/document.xml",docxml);
-    zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}).then(blob=>{
-      const a=document.createElement("a");
-      a.href=URL.createObjectURL(blob);
-      a.download=item.title.replace(/[^a-zA-Z0-9äöüÄÖÜß\s]/g,"").replace(/\s+/g,"_").substring(0,50)+".docx";
-      a.click();
-    });
-  };
-  if(!window.JSZip){const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=doZip;document.head.appendChild(s);}
-  else doZip();
+  const doZip=()=>{const zip=new window.JSZip();zip.file("[Content_Types].xml",ct);zip.file("_rels/.rels",rels);zip.file("word/document.xml",docxml);zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}).then(blob=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=item.title.replace(/[^a-zA-Z0-9äöüÄÖÜß\s]/g,"").replace(/\s+/g,"_").substring(0,50)+".docx";a.click();});};
+  if(!window.JSZip){const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=doZip;document.head.appendChild(s);}else doZip();
 }
 
-// ── Icons ─────────────────────────────────────────────────────────────────────
 const Icon = ({ name, size=18 }) => {
   const p={fill:"none",stroke:"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round"};
   const icons={
@@ -112,13 +93,14 @@ const Icon = ({ name, size=18 }) => {
     pdf:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
     word:     <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2l2 5 2-5h2"/></svg>,
     chevron:  <svg width={size} height={size} viewBox="0 0 24 24" {...p}><polyline points="6 9 12 15 18 9"/></svg>,
+    sideOpen: <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="14 8 11 12 14 16"/></svg>,
+    sideClose:<svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><polyline points="11 8 14 12 11 16"/></svg>,
   };
   return icons[name]||null;
 };
 
-// ── Setup Banner ──────────────────────────────────────────────────────────────
 function SetupBanner() {
-  return (
+  return(
     <div style={{minHeight:"100vh",background:"#070707",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
       <div style={{maxWidth:"580px",width:"100%",background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:"16px",padding:"2.5rem"}}>
         <div style={{fontSize:"2.5rem",textAlign:"center",marginBottom:"1rem"}}>⚙️</div>
@@ -136,7 +118,6 @@ function SetupBanner() {
   );
 }
 
-// ── Upload Modal ──────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onRefresh }) {
   const [tab,setTab]=useState("text");
   const [title,setTitle]=useState("");
@@ -210,7 +191,6 @@ function UploadModal({ onClose, onRefresh }) {
   );
 }
 
-// ── Detail Modal ──────────────────────────────────────────────────────────────
 function DetailModal({ item, onClose, onDelete, onStar }) {
   const [downloading,setDownloading]=useState(false);
   const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
@@ -263,33 +243,22 @@ function DetailModal({ item, onClose, onDelete, onStar }) {
   );
 }
 
-// ── Collapsible Sidebar Section ───────────────────────────────────────────────
 function SideSection({ title, children, defaultOpen=true }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div style={{ marginBottom:"4px" }}>
-      <button onClick={()=>setOpen(o=>!o)} style={{
-        width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-        padding:"0.35rem 0.5rem", background:"none", border:"none", cursor:"pointer",
-        color:"#3a3a3a", fontSize:"0.58rem", letterSpacing:"0.18em", fontFamily:"inherit",
-        transition:"color 0.15s"
-      }} onMouseEnter={e=>e.currentTarget.style.color="#666"} onMouseLeave={e=>e.currentTarget.style.color="#3a3a3a"}>
+  const [open,setOpen]=useState(defaultOpen);
+  return(
+    <div style={{marginBottom:"4px"}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.35rem 0.5rem",background:"none",border:"none",cursor:"pointer",color:"#3a3a3a",fontSize:"0.58rem",letterSpacing:"0.18em",fontFamily:"inherit",transition:"color 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.color="#666"} onMouseLeave={e=>e.currentTarget.style.color="#3a3a3a"}>
         <span>{title}</span>
-        <div style={{ transform:open?"rotate(0deg)":"rotate(-90deg)", transition:"transform 0.2s", color:"#3a3a3a" }}>
-          <Icon name="chevron" size={12}/>
-        </div>
+        <div style={{transform:open?"rotate(0deg)":"rotate(-90deg)",transition:"transform 0.2s"}}><Icon name="chevron" size={12}/></div>
       </button>
-      <div style={{
-        overflow:"hidden", maxHeight:open?"1000px":"0px",
-        transition:"max-height 0.3s ease", display:"flex", flexDirection:"column", gap:"2px"
-      }}>
+      <div style={{overflow:"hidden",maxHeight:open?"1000px":"0px",transition:"max-height 0.3s ease",display:"flex",flexDirection:"column",gap:"2px"}}>
         {children}
       </div>
     </div>
   );
 }
 
-// ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -300,11 +269,11 @@ export default function App() {
   const [filterType,setFilterType]=useState("Alle");
   const [filterStarred,setFilterStarred]=useState(false);
   const [toast,setToast]=useState(null);
+  const [sideOpen,setSideOpen]=useState(true); // ← NEU: Sidebar offen/zu
 
   if(!supabase) return <SetupBanner/>;
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
-
   const loadItems=async()=>{
     setLoading(true);
     const{data,error}=await supabase.from(TABLE).select("*").order("created_at",{ascending:false});
@@ -312,19 +281,9 @@ export default function App() {
     else showToast("Fehler: "+error.message,"err");
     setLoading(false);
   };
-
   useEffect(()=>{loadItems();},[]);
-
-  const handleDelete=async(id,filePath)=>{
-    if(filePath)await supabase.storage.from(BUCKET).remove([filePath]);
-    await supabase.from(TABLE).delete().eq("id",id);
-    setItems(p=>p.filter(i=>i.id!==id));
-    showToast("Gelöscht.","err");
-  };
-  const handleStar=async(id,starred)=>{
-    await supabase.from(TABLE).update({starred}).eq("id",id);
-    setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));
-  };
+  const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
+  const handleStar=async(id,starred)=>{await supabase.from(TABLE).update({starred}).eq("id",id);setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));};
 
   const filtered=items.filter(i=>{
     const q=search.toLowerCase();
@@ -338,16 +297,8 @@ export default function App() {
   const textCount=items.filter(i=>i.type==="text").length;
   const fileCount=items.filter(i=>i.type==="file").length;
 
-  // Helper für Sidebar-Buttons
   const SideBtn=({label,active,onClick,badge,color})=>(
-    <button onClick={onClick} className="sbtn" style={{
-      display:"flex",justifyContent:"space-between",alignItems:"center",
-      padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",
-      background:active?(color?`${color}15`:"#1a1a1a"):"transparent",
-      color:active?(color||"#fff"):"#4a4a4a",cursor:"pointer",
-      fontSize:"0.8rem",fontFamily:"inherit",textAlign:"left",
-      borderLeft:active&&color?`2px solid ${color}`:"2px solid transparent"
-    }}>
+    <button onClick={onClick} className="sbtn" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:active?(color?`${color}15`:"#1a1a1a"):"transparent",color:active?(color||"#fff"):"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit",textAlign:"left",borderLeft:active&&color?`2px solid ${color}`:"2px solid transparent"}}>
       <span>{label}</span>
       {badge>0&&<span style={{fontSize:"0.62rem",background:"#0f0f0f",padding:"0.08rem 0.35rem",borderRadius:"4px",color:"#444"}}>{badge}</span>}
     </button>
@@ -363,6 +314,9 @@ export default function App() {
         .card{transition:transform .18s,box-shadow .18s;cursor:pointer}.card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
         .sbtn{transition:all .15s}.sbtn:hover{color:#ccc!important;background:#111!important}
         body{margin:0;padding:0;background:#070707}
+        .sidebar{transition:width 0.3s ease,opacity 0.3s ease,padding 0.3s ease}
+        .toggle-btn{transition:all 0.2s}
+        .toggle-btn:hover{background:#1a1a1a!important;color:#fff!important}
       `}</style>
 
       {toast&&<div style={{position:"fixed",top:"1.25rem",right:"1.25rem",zIndex:200,background:toast.type==="err"?"#120808":"#081408",border:`1px solid ${toast.type==="err"?"#7b2d2d":"#2d7b4a"}`,borderRadius:"10px",padding:"0.65rem 1.1rem",color:toast.type==="err"?"#e57373":"#66bb6a",fontSize:"0.8rem",animation:"slideDown .25s ease",display:"flex",alignItems:"center",gap:"0.5rem"}}><Icon name={toast.type==="err"?"trash":"check"} size={12}/>{toast.msg}</div>}
@@ -370,6 +324,20 @@ export default function App() {
       {/* Header */}
       <div style={{borderBottom:"1px solid #111",background:"#090909",padding:"1rem 1.75rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem",flexWrap:"wrap",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",gap:"0.9rem"}}>
+
+          {/* ── Sidebar Toggle Button ── */}
+          <button
+            onClick={()=>setSideOpen(o=>!o)}
+            className="toggle-btn"
+            title={sideOpen?"Sidebar einklappen":"Sidebar ausklappen"}
+            style={{
+              background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",
+              padding:"0.45rem",cursor:"pointer",color:"#555",flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center"
+            }}>
+            <Icon name={sideOpen?"sideOpen":"sideClose"} size={17}/>
+          </button>
+
           <div style={{width:"36px",height:"36px",background:"#fff",borderRadius:"9px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="book" size={19}/></div>
           <div>
             <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.05rem",fontWeight:"bold"}}>FISI Lernportal</div>
@@ -384,53 +352,49 @@ export default function App() {
 
       <div style={{display:"flex",minHeight:"calc(100vh - 64px)"}}>
 
-        {/* ── SIDEBAR ── */}
-        <div style={{width:"210px",flexShrink:0,borderRight:"1px solid #0f0f0f",padding:"1rem 0.65rem",display:"flex",flexDirection:"column",gap:"2px",overflowY:"auto"}}>
+        {/* ── SIDEBAR – animiert ein/ausklappen ── */}
+        <div className="sidebar" style={{
+          width: sideOpen ? "210px" : "0px",
+          opacity: sideOpen ? 1 : 0,
+          overflow: "hidden",
+          flexShrink: 0,
+          borderRight: sideOpen ? "1px solid #0f0f0f" : "none",
+          background:"#090909",
+        }}>
+          {/* Inhalt nur rendern wenn offen (verhindert Tab-Navigation im versteckten Zustand) */}
+          <div style={{width:"210px",padding:"1rem 0.65rem",display:"flex",flexDirection:"column",gap:"2px",overflowY:"auto",height:"100%"}}>
 
-          {/* Typ-Filter */}
-          <SideSection title="TYP">
-            <SideBtn label="Alle" active={filterType==="Alle"} onClick={()=>setFilterType("Alle")} badge={items.length}/>
-            <SideBtn label="📝 Texte" active={filterType==="text"} onClick={()=>setFilterType("text")} badge={textCount}/>
-            <SideBtn label="📎 Dateien" active={filterType==="file"} onClick={()=>setFilterType("file")} badge={fileCount}/>
-          </SideSection>
+            <SideSection title="TYP">
+              <SideBtn label="Alle" active={filterType==="Alle"} onClick={()=>setFilterType("Alle")} badge={items.length}/>
+              <SideBtn label="📝 Texte" active={filterType==="text"} onClick={()=>setFilterType("text")} badge={textCount}/>
+              <SideBtn label="📎 Dateien" active={filterType==="file"} onClick={()=>setFilterType("file")} badge={fileCount}/>
+            </SideSection>
 
-          <div style={{height:"1px",background:"#0f0f0f",margin:"0.35rem 0"}}/>
+            <div style={{height:"1px",background:"#0f0f0f",margin:"0.35rem 0"}}/>
 
-          {/* Alle Kategorien */}
-          <SideSection title="KATEGORIEN">
-            <SideBtn label="Alle" active={filterCat==="Alle"} onClick={()=>setFilterCat("Alle")} badge={items.length}/>
-            {CATEGORIES.map(cat=>{
-              const col=CAT_COLORS[cat];
-              return <SideBtn key={cat} label={cat} active={filterCat===cat} onClick={()=>setFilterCat(cat)} badge={counts[cat]||0} color={col.badge}/>;
-            })}
-          </SideSection>
+            <SideSection title="KATEGORIEN">
+              <SideBtn label="Alle" active={filterCat==="Alle"} onClick={()=>setFilterCat("Alle")} badge={items.length}/>
+              {CATEGORIES.map(cat=>{const col=CAT_COLORS[cat];return <SideBtn key={cat} label={cat} active={filterCat===cat} onClick={()=>setFilterCat(cat)} badge={counts[cat]||0} color={col.badge}/>;} )}
+            </SideSection>
 
-          <div style={{height:"1px",background:"#0f0f0f",margin:"0.35rem 0"}}/>
+            <div style={{height:"1px",background:"#0f0f0f",margin:"0.35rem 0"}}/>
 
-          {/* Favoriten */}
-          <SideSection title="WEITERE" defaultOpen={true}>
-            <button onClick={()=>setFilterStarred(!filterStarred)} className="sbtn" style={{
-              display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",
-              borderRadius:"6px",border:"none",
-              background:filterStarred?"#1a150a":"transparent",
-              color:filterStarred?"#f5c518":"#4a4a4a",
-              cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit",
-              borderLeft:filterStarred?"2px solid #f5c518":"2px solid transparent"
-            }}>
-              <Icon name="star" size={12}/><span>Favoriten</span>
-              {items.filter(i=>i.starred).length>0&&<span style={{fontSize:"0.62rem",background:"#0f0f0f",padding:"0.08rem 0.35rem",borderRadius:"4px",color:"#444",marginLeft:"auto"}}>{items.filter(i=>i.starred).length}</span>}
-            </button>
-          </SideSection>
+            <SideSection title="WEITERE">
+              <button onClick={()=>setFilterStarred(!filterStarred)} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:filterStarred?"#1a150a":"transparent",color:filterStarred?"#f5c518":"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit",borderLeft:filterStarred?"2px solid #f5c518":"2px solid transparent"}}>
+                <Icon name="star" size={12}/><span>Favoriten</span>
+                {items.filter(i=>i.starred).length>0&&<span style={{fontSize:"0.62rem",background:"#0f0f0f",padding:"0.08rem 0.35rem",borderRadius:"4px",color:"#444",marginLeft:"auto"}}>{items.filter(i=>i.starred).length}</span>}
+              </button>
+            </SideSection>
 
-          {/* Statistik */}
-          <div style={{marginTop:"auto",padding:"0.75rem 0.5rem",borderTop:"1px solid #0f0f0f"}}>
-            <div style={{fontSize:"0.58rem",color:"#2a2a2a",letterSpacing:"0.15em",marginBottom:"0.5rem"}}>STATISTIK</div>
-            {[["Gesamt",items.length],["Texte",textCount],["Dateien",fileCount],["Favoriten",items.filter(i=>i.starred).length]].map(([l,v])=>(
-              <div key={l} style={{display:"flex",justifyContent:"space-between",marginBottom:"0.28rem"}}>
-                <span style={{fontSize:"0.7rem",color:"#3a3a3a"}}>{l}</span>
-                <span style={{fontSize:"0.7rem",color:"#666",fontFamily:"'Courier New',monospace"}}>{v}</span>
-              </div>
-            ))}
+            <div style={{marginTop:"auto",padding:"0.75rem 0.5rem",borderTop:"1px solid #0f0f0f"}}>
+              <div style={{fontSize:"0.58rem",color:"#2a2a2a",letterSpacing:"0.15em",marginBottom:"0.5rem"}}>STATISTIK</div>
+              {[["Gesamt",items.length],["Texte",textCount],["Dateien",fileCount],["Favoriten",items.filter(i=>i.starred).length]].map(([l,v])=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between",marginBottom:"0.28rem"}}>
+                  <span style={{fontSize:"0.7rem",color:"#3a3a3a"}}>{l}</span>
+                  <span style={{fontSize:"0.7rem",color:"#666",fontFamily:"'Courier New',monospace"}}>{v}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -442,7 +406,6 @@ export default function App() {
             {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:"0.7rem",top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#444",cursor:"pointer"}}><Icon name="close" size={12}/></button>}
           </div>
 
-          {/* Aktive Filter anzeigen */}
           {(filterCat!=="Alle"||filterType!=="Alle"||filterStarred||search)&&(
             <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginBottom:"0.9rem",alignItems:"center"}}>
               <span style={{fontSize:"0.65rem",color:"#555"}}>Filter:</span>
@@ -485,8 +448,8 @@ export default function App() {
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"0.85rem",paddingTop:"0.65rem",borderTop:`1px solid ${col.badge}10`}}>
                       <div style={{display:"flex",gap:"0.3rem"}}>
                         {item.type==="text"&&<>
-                          <button onClick={e=>{e.stopPropagation();generatePDF(item);}} title="Als PDF" style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#ef4444",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="pdf" size={11}/>PDF</button>
-                          <button onClick={e=>{e.stopPropagation();generateDOCX(item);}} title="Als Word" style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="word" size={11}/>Word</button>
+                          <button onClick={e=>{e.stopPropagation();generatePDF(item);}} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#ef4444",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="pdf" size={11}/>PDF</button>
+                          <button onClick={e=>{e.stopPropagation();generateDOCX(item);}} style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"5px",padding:"0.2rem 0.5rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.65rem",display:"flex",alignItems:"center",gap:"0.2rem"}}><Icon name="word" size={11}/>Word</button>
                         </>}
                       </div>
                       <span onClick={()=>setSelected(item)} style={{fontSize:"0.6rem",color:"#2a2a2a"}}>{item.author}</span>
