@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -20,11 +19,10 @@ export default async function handler(req, res) {
     }));
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const baseUrl = '[generativelanguage.googleapis.com](https://generativelanguage.googleapis.com)';
-    const path = '/v1beta/models/gemini-1.5-flash:generateContent';
-    const url = baseUrl + path + '?key=' + apiKey;
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
+    url.searchParams.set('key', apiKey);
 
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -44,6 +42,7 @@ export default async function handler(req, res) {
     }
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
     return res.status(200).json({
       content: [{ type: 'text', text }]
     });
