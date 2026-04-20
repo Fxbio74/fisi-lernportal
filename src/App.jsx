@@ -146,7 +146,7 @@ Deine Regeln:
         })
       });
       const data = await res.json();
-      const reply = data.content?.[0]?.text || "Fehler beim Laden der Antwort.";
+      const reply = data.content?.[0]?.text || "Fehler: " + JSON.stringify(data);
       setMessages(prev => [...prev, { role:"assistant", content:reply }]);
     } catch(e) {
       setMessages(prev => [...prev, { role:"assistant", content:"❌ Fehler bei der KI-Verbindung: "+e.message }]);
