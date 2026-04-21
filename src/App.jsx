@@ -1019,45 +1019,42 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
 
   // Text aufbereiten fuer natuerlicheres Vorlesen
   const prepareText=(raw)=>{
-    let t = raw||"";
-    // Ueberschriften mit laengerer Pause
-    t = t.replace(/^([A-ZÜÖÄ][A-ZÜÖÄSS\s&\-\/]+):$/gm, "$1. ");
-    // Aufzaehlungszeichen entfernen und Pause einfuegen
-    t = t.replace(/^[•\-→✓✗▪◦]\s*/gm, "... ");
-    // Technische Kuerzel langsamer sprechen (Leerzeichen einfuegen)
-    t = t.replace(/([A-Z]{2,})/g, (m)=>m.split("").join(" "));
-    // Mehrere Zeilenumbrueche = lange Pause
-    t = t.replace(/
-{2,}/g, ". ");
-    // Einzelner Zeilenumbruch = kurze Pause
-    t = t.replace(/
-/g, ", ");
-    // Doppelpunkt mit Pause
-    t = t.replace(/:\s*/g, ": ");
-    // Pipe-Zeichen als Trenner
-    t = t.replace(/\s*\|\s*/g, ". ");
-    // Klammern mit kurzer Pause
-    t = t.replace(/\(/g, ", ").replace(/\)/g, ", ");
-    // Mehrfache Leerzeichen bereinigen
-    t = t.replace(/\s{2,}/g, " ");
-    // Mehrfache Punkte bereinigen
-    t = t.replace(/\.{2,}/g, ". ");
+    let t=raw||"";
+    t=t.replace(/\n\n+/g,". ");
+    t=t.replace(/\n/g,", ");
+    t=t.replace(/\s*\|\s*/g,". ");
+    t=t.replace(/\s*\(\s*/g,", ").replace(/\s*\)\s*/g,", ");
+    t=t.replace(/[.]{2,}/g,". ");
+    t=t.replace(/\s{2,}/g," ");
     return t.trim();
   };
 
-  // Text in Saetze aufteilen und nacheinander sprechen (verhindert Abbrueche)
+  const splitSentences=(text)=>{
+    const parts=[];
+    let buf="";
+    for(let i=0;i<text.length;i++){
+      buf+=text[i];
+      const c=text[i];
+      const next=text[i+1]||"";
+      if((c==="."||c==="!"||c==="?")&&(next===" "||next==="\n"||next==="")){
+        const s=buf.trim();
+        if(s.length>3) parts.push(s);
+        buf="";
+      }
+    }
+    if(buf.trim().length>3) parts.push(buf.trim());
+    return parts.length>0?parts:[text];
+  };
+
   const speakChunks=(chunks,voice,idx=0)=>{
     if(idx>=chunks.length){setSpeaking(false);return;}
     const utt=new SpeechSynthesisUtterance(chunks[idx]);
     utt.lang="de-DE";
-    utt.rate=0.88;      // etwas langsamer = natuerlicher
+    utt.rate=0.88;
     utt.pitch=1.0;
     utt.volume=1.0;
     if(voice) utt.voice=voice;
-    utt.onend=()=>{
-      // Kurze Pause zwischen Chunks
-      setTimeout(()=>speakChunks(chunks,voice,idx+1),120);
-    };
+    utt.onend=()=>setTimeout(()=>speakChunks(chunks,voice,idx+1),110);
     utt.onerror=(e)=>{
       if(e.error!=="interrupted") speakChunks(chunks,voice,idx+1);
       else setSpeaking(false);
@@ -1068,45 +1065,21 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
   const handleSpeak=()=>{
     if(!window.speechSynthesis){alert("Dein Browser unterstuetzt kein Text-to-Speech!");return;}
     if(speaking){window.speechSynthesis.cancel();setSpeaking(false);return;}
-
-    const rawText=`${item.title}. Kategorie: ${item.category}. ${(item.content||"").substring(0,4000)}`;
+    const rawText=item.title+". Kategorie: "+item.category+". "+(item.content||"").substring(0,4000);
     const prepared=prepareText(rawText);
-
-    // In Saetze aufteilen (an . ! ? aufteilen)
-    const sentences=prepared
-      .split(/(?<=[.!?])\s+/)
-      .map(s=>s.trim())
-      .filter(s=>s.length>2);
-
-    // Beste deutsche Stimme auswaehlen
+    const chunks=splitSentences(prepared);
     const getBestVoice=()=>{
-      const voices=window.speechSynthesis.getVoices();
-      // Priorisierung: Microsoft Neural > Microsoft > Google > andere
-      return voices.find(v=>v.lang==="de-DE"&&v.name.includes("Katja"))
-        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Conrad"))
-        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Hedda"))
-        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
-        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))
-        ||voices.find(v=>v.lang==="de-DE")
-        ||voices.find(v=>v.lang.startsWith("de"));
+      const vv=window.speechSynthesis.getVoices();
+      return vv.find(v=>v.lang==="de-DE"&&v.name.includes("Katja"))
+        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Conrad"))
+        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
+        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))
+        ||vv.find(v=>v.lang==="de-DE")
+        ||vv.find(v=>v.lang.startsWith("de"));
     };
-
-    // Stimmen laden (manchmal asynchron)
-    const startSpeaking=()=>{
-      const voice=getBestVoice();
-      window.speechSynthesis.cancel();
-      setSpeaking(true);
-      speakChunks(sentences,voice,0);
-    };
-
-    if(window.speechSynthesis.getVoices().length>0){
-      startSpeaking();
-    } else {
-      window.speechSynthesis.onvoiceschanged=()=>{
-        window.speechSynthesis.onvoiceschanged=null;
-        startSpeaking();
-      };
-    }
+    const start=()=>{window.speechSynthesis.cancel();setSpeaking(true);speakChunks(chunks,getBestVoice(),0);};
+    if(window.speechSynthesis.getVoices().length>0) start();
+    else{window.speechSynthesis.onvoiceschanged=()=>{window.speechSynthesis.onvoiceschanged=null;start();};}
   };
 
   useEffect(()=>{ return ()=>{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }; },[]);
