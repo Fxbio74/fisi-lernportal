@@ -1007,7 +1007,7 @@ function UploadModal({ onClose, onRefresh }) {
 }
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
-function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
+function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobile }) {
   const [downloading,setDownloading]=useState(false);
   const [speaking,setSpeaking]=useState(false);
   const [activeVideo,setActiveVideo]=useState(null);
@@ -1504,7 +1504,7 @@ export default function App() {
       )}
 
       {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onRefresh={loadItems}/>}
-      {selected&&<DetailModal item={selected} onClose={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(null); }} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
+      {selected&&<DetailModal item={selected} onClose={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(null); }} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}} isMobile={isMobile}/>}
       {kiItem&&<KIChatModal item={kiItem} onClose={()=>setKiItem(null)}/>}
       {youtubeItem&&<YouTubeModal item={youtubeItem} onClose={()=>setYoutubeItem(null)} onSave={handleYouTubeSave}/>}
     </div>
