@@ -1009,11 +1009,37 @@ function UploadModal({ onClose, onRefresh }) {
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
   const [downloading,setDownloading]=useState(false);
+  const [speaking,setSpeaking]=useState(false);
+  const [activeVideo,setActiveVideo]=useState(null);
   const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
   const fi=item.file_name?getFileInfo(item.file_name):null;
   const handleDownloadFile=async()=>{setDownloading(true);try{const{data,error}=await supabase.storage.from(BUCKET).download(item.file_path);if(error)throw error;const a=document.createElement("a");a.href=URL.createObjectURL(data);a.download=item.file_name;a.click();}catch(e){alert("Fehler: "+e.message);}setDownloading(false);};
   const handleViewFile=async()=>{const{data}=await supabase.storage.from(BUCKET).getPublicUrl(item.file_path);window.open(data.publicUrl,"_blank");};
   const videos=item.youtube_links||[];
+
+  const handleSpeak=()=>{
+    if(!window.speechSynthesis){alert("Dein Browser unterstuetzt kein Text-to-Speech!");return;}
+    if(speaking){window.speechSynthesis.cancel();setSpeaking(false);return;}
+    const text=`${item.title}. Kategorie: ${item.category}. ${(item.content||"").substring(0,3000)}`;
+    const utt=new SpeechSynthesisUtterance(text);
+    utt.lang="de-DE"; utt.rate=0.92; utt.pitch=1;
+    const getVoice=()=>{
+      const voices=window.speechSynthesis.getVoices();
+      return voices.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
+        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))
+        ||voices.find(v=>v.lang==="de-DE")
+        ||voices.find(v=>v.lang.startsWith("de"));
+    };
+    const voice=getVoice();
+    if(voice) utt.voice=voice;
+    utt.onend=()=>setSpeaking(false);
+    utt.onerror=()=>setSpeaking(false);
+    window.speechSynthesis.speak(utt);
+    setSpeaking(true);
+  };
+
+  useEffect(()=>{ return ()=>{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }; },[]);
+
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"820px",maxHeight:"93vh",overflow:"auto"}}>
@@ -1031,6 +1057,9 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
             <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",justifyContent:"flex-end"}}>
               <button onClick={onKI} style={{background:`${col.badge}15`,border:`1px solid ${col.badge}40`,borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:col.badge,fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}><Icon name="bot" size={13}/>KI Hilfe</button>
               <button onClick={onYouTube} style={{background:"#ef444415",border:"1px solid #ef444440",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#ef4444",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",fontWeight:"bold"}}><Icon name="youtube" size={13}/>Videos</button>
+              {item.type==="text"&&<button onClick={handleSpeak} title={speaking?"Vorlesen stoppen":"Vorlesen"} style={{background:speaking?"#1a0a2e":"none",border:`1px solid ${speaking?"#a855f7":"#2a2a2a"}`,borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:speaking?"#a855f7":"#666",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit",transition:"all 0.2s"}}>
+                {speaking?"⏹ Stopp":"🔊 Vorlesen"}
+              </button>}
               {item.type==="text"&&<>
                 <button onClick={()=>generatePDF(item)} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#ef4444",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit"}}><Icon name="pdf" size={13}/>PDF</button>
                 <button onClick={()=>generateDOCX(item)} style={{background:"none",border:"1px solid #1a2a3a",borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:"#3b82f6",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit"}}><Icon name="word" size={13}/>Word</button>
@@ -1057,13 +1086,48 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
             </div>
           </div>}
           {videos.length>0&&<div style={{marginTop:"1.5rem"}}>
-            <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.75rem"}}>🎬 YOUTUBE VIDEOS</div>
-            {videos.map((v,i)=>(
-              <div key={i} style={{borderRadius:"10px",overflow:"hidden",border:"1px solid #1e1e1e",marginBottom:"1rem"}}>
-                <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}><iframe src={`https://www.youtube.com/embed/${v.id}`} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allowFullScreen/></div>
-                <div style={{padding:"0.5rem 0.75rem",background:"#0f0f0f",fontSize:"0.8rem",color:"#888"}}>{v.title}</div>
-              </div>
-            ))}
+            <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.75rem"}}>🎬 YOUTUBE VIDEOS ({videos.length})</div>
+            {/* Thumbnail-Liste – klicken zum Laden des Players */}
+            <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+              {videos.map((v,i)=>(
+                <div key={i} style={{borderRadius:"12px",overflow:"hidden",border:"1px solid #1e1e1e",background:"#0f0f0f"}}>
+                  {activeVideo===i ? (
+                    <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
+                      <iframe
+                        src={`https://www.youtube.com/embed/${v.id}?autoplay=1&rel=0`}
+                        style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        title={v.title}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      onClick={()=>setActiveVideo(i)}
+                      style={{position:"relative",paddingBottom:"56.25%",background:"#000",cursor:"pointer",overflow:"hidden"}}
+                    >
+                      <img
+                        src={`https://img.youtube.com/vi/${v.id}/maxresdefault.jpg`}
+                        onError={e=>{e.target.src=`https://img.youtube.com/vi/${v.id}/hqdefault.jpg`;}}
+                        alt={v.title}
+                        style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
+                      />
+                      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <div style={{width:"64px",height:"64px",background:"rgba(255,0,0,0.9)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.5)",transition:"transform 0.2s"}}
+                          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
+                          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{padding:"0.6rem 0.9rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:"0.82rem",color:"#ccc",fontWeight:"bold"}}>{v.title}</div>
+                    {activeVideo===i&&<button onClick={()=>setActiveVideo(null)} style={{background:"none",border:"1px solid #2a2a2a",borderRadius:"6px",padding:"0.2rem 0.6rem",cursor:"pointer",color:"#666",fontSize:"0.72rem"}}>Schließen</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>}
         </div>
       </div>
