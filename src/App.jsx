@@ -1131,12 +1131,21 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
           </div>}
           {videos.length>0&&<div style={{marginTop:"1.5rem"}}>
             <div style={{fontSize:"0.7rem",color:"#555",letterSpacing:"0.15em",marginBottom:"0.75rem"}}>🎬 YOUTUBE VIDEOS ({videos.length})</div>
-            {/* Thumbnail-Liste – klicken zum Laden des Players */}
             <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
               {videos.map((v,i)=>(
                 <div key={i} style={{borderRadius:"12px",overflow:"hidden",border:"1px solid #1e1e1e",background:"#0f0f0f"}}>
-                  {activeVideo===i ? (
-                    <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
+                  {/* Thumbnail mit Play-Button */}
+                  <div style={{position:"relative",paddingBottom:"56.25%",background:"#111",cursor:"pointer",overflow:"hidden"}}
+                    onClick={()=>{
+                      if(isMobile){
+                        // Auf Mobile: direkt YouTube App / Safari öffnen
+                        window.open(`https://www.youtube.com/watch?v=${v.id}`,"_blank");
+                      } else {
+                        setActiveVideo(activeVideo===i?null:i);
+                      }
+                    }}>
+                    {/* Eingebetteter Player – nur Desktop wenn aktiv */}
+                    {!isMobile&&activeVideo===i ? (
                       <iframe
                         src={`https://www.youtube.com/embed/${v.id}?autoplay=1&rel=0`}
                         style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}}
@@ -1144,30 +1153,33 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
                         allowFullScreen
                         title={v.title}
                       />
-                    </div>
-                  ) : (
-                    <div
-                      onClick={()=>setActiveVideo(i)}
-                      style={{position:"relative",paddingBottom:"56.25%",background:"#000",cursor:"pointer",overflow:"hidden"}}
-                    >
-                      <img
-                        src={`https://img.youtube.com/vi/${v.id}/maxresdefault.jpg`}
-                        onError={e=>{e.target.src=`https://img.youtube.com/vi/${v.id}/hqdefault.jpg`;}}
-                        alt={v.title}
-                        style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
-                      />
-                      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <div style={{width:"64px",height:"64px",background:"rgba(255,0,0,0.9)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.5)",transition:"transform 0.2s"}}
-                          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"}
-                          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
+                    ) : (
+                      <>
+                        <img
+                          src={`https://img.youtube.com/vi/${v.id}/maxresdefault.jpg`}
+                          onError={e=>{e.target.src=`https://img.youtube.com/vi/${v.id}/hqdefault.jpg`;}}
+                          alt={v.title}
+                          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
+                        />
+                        {/* Play Button */}
+                        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.5rem"}}>
+                          <div style={{width:isMobile?"72px":"64px",height:isMobile?"72px":"64px",background:"rgba(255,0,0,0.92)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 24px rgba(0,0,0,0.6)"}}>
+                            <svg width={isMobile?30:26} height={isMobile?30:26} viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
+                          </div>
+                          {isMobile&&<div style={{background:"rgba(0,0,0,0.7)",borderRadius:"20px",padding:"0.25rem 0.75rem",fontSize:"0.72rem",color:"#fff"}}>In YouTube öffnen</div>}
                         </div>
-                      </div>
+                      </>
+                    )}
+                  </div>
+                  <div style={{padding:"0.65rem 0.9rem",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem"}}>
+                    <div style={{fontSize:"0.82rem",color:"#ccc",fontWeight:"bold",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.title}</div>
+                    <div style={{display:"flex",gap:"0.4rem",flexShrink:0}}>
+                      {!isMobile&&activeVideo===i&&<button onClick={()=>setActiveVideo(null)} style={{background:"none",border:"1px solid #2a2a2a",borderRadius:"6px",padding:"0.25rem 0.6rem",cursor:"pointer",color:"#666",fontSize:"0.72rem"}}>✕</button>}
+                      <button onClick={()=>window.open(`https://www.youtube.com/watch?v=${v.id}`,"_blank")} style={{background:"#ef444415",border:"1px solid #ef444430",borderRadius:"6px",padding:"0.25rem 0.7rem",cursor:"pointer",color:"#ef4444",fontSize:"0.72rem",display:"flex",alignItems:"center",gap:"0.3rem"}}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#ef4444"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>
+                        YouTube
+                      </button>
                     </div>
-                  )}
-                  <div style={{padding:"0.6rem 0.9rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:"0.82rem",color:"#ccc",fontWeight:"bold"}}>{v.title}</div>
-                    {activeVideo===i&&<button onClick={()=>setActiveVideo(null)} style={{background:"none",border:"1px solid #2a2a2a",borderRadius:"6px",padding:"0.2rem 0.6rem",cursor:"pointer",color:"#666",fontSize:"0.72rem"}}>Schließen</button>}
                   </div>
                 </div>
               ))}
