@@ -1017,25 +1017,96 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
   const handleViewFile=async()=>{const{data}=await supabase.storage.from(BUCKET).getPublicUrl(item.file_path);window.open(data.publicUrl,"_blank");};
   const videos=item.youtube_links||[];
 
+  // Text aufbereiten fuer natuerlicheres Vorlesen
+  const prepareText=(raw)=>{
+    let t = raw||"";
+    // Ueberschriften mit laengerer Pause
+    t = t.replace(/^([A-ZÜÖÄ][A-ZÜÖÄSS\s&\-\/]+):$/gm, "$1. ");
+    // Aufzaehlungszeichen entfernen und Pause einfuegen
+    t = t.replace(/^[•\-→✓✗▪◦]\s*/gm, "... ");
+    // Technische Kuerzel langsamer sprechen (Leerzeichen einfuegen)
+    t = t.replace(/([A-Z]{2,})/g, (m)=>m.split("").join(" "));
+    // Mehrere Zeilenumbrueche = lange Pause
+    t = t.replace(/
+{2,}/g, ". ");
+    // Einzelner Zeilenumbruch = kurze Pause
+    t = t.replace(/
+/g, ", ");
+    // Doppelpunkt mit Pause
+    t = t.replace(/:\s*/g, ": ");
+    // Pipe-Zeichen als Trenner
+    t = t.replace(/\s*\|\s*/g, ". ");
+    // Klammern mit kurzer Pause
+    t = t.replace(/\(/g, ", ").replace(/\)/g, ", ");
+    // Mehrfache Leerzeichen bereinigen
+    t = t.replace(/\s{2,}/g, " ");
+    // Mehrfache Punkte bereinigen
+    t = t.replace(/\.{2,}/g, ". ");
+    return t.trim();
+  };
+
+  // Text in Saetze aufteilen und nacheinander sprechen (verhindert Abbrueche)
+  const speakChunks=(chunks,voice,idx=0)=>{
+    if(idx>=chunks.length){setSpeaking(false);return;}
+    const utt=new SpeechSynthesisUtterance(chunks[idx]);
+    utt.lang="de-DE";
+    utt.rate=0.88;      // etwas langsamer = natuerlicher
+    utt.pitch=1.0;
+    utt.volume=1.0;
+    if(voice) utt.voice=voice;
+    utt.onend=()=>{
+      // Kurze Pause zwischen Chunks
+      setTimeout(()=>speakChunks(chunks,voice,idx+1),120);
+    };
+    utt.onerror=(e)=>{
+      if(e.error!=="interrupted") speakChunks(chunks,voice,idx+1);
+      else setSpeaking(false);
+    };
+    window.speechSynthesis.speak(utt);
+  };
+
   const handleSpeak=()=>{
     if(!window.speechSynthesis){alert("Dein Browser unterstuetzt kein Text-to-Speech!");return;}
     if(speaking){window.speechSynthesis.cancel();setSpeaking(false);return;}
-    const text=`${item.title}. Kategorie: ${item.category}. ${(item.content||"").substring(0,3000)}`;
-    const utt=new SpeechSynthesisUtterance(text);
-    utt.lang="de-DE"; utt.rate=0.92; utt.pitch=1;
-    const getVoice=()=>{
+
+    const rawText=`${item.title}. Kategorie: ${item.category}. ${(item.content||"").substring(0,4000)}`;
+    const prepared=prepareText(rawText);
+
+    // In Saetze aufteilen (an . ! ? aufteilen)
+    const sentences=prepared
+      .split(/(?<=[.!?])\s+/)
+      .map(s=>s.trim())
+      .filter(s=>s.length>2);
+
+    // Beste deutsche Stimme auswaehlen
+    const getBestVoice=()=>{
       const voices=window.speechSynthesis.getVoices();
-      return voices.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
+      // Priorisierung: Microsoft Neural > Microsoft > Google > andere
+      return voices.find(v=>v.lang==="de-DE"&&v.name.includes("Katja"))
+        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Conrad"))
+        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Hedda"))
+        ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
         ||voices.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))
         ||voices.find(v=>v.lang==="de-DE")
         ||voices.find(v=>v.lang.startsWith("de"));
     };
-    const voice=getVoice();
-    if(voice) utt.voice=voice;
-    utt.onend=()=>setSpeaking(false);
-    utt.onerror=()=>setSpeaking(false);
-    window.speechSynthesis.speak(utt);
-    setSpeaking(true);
+
+    // Stimmen laden (manchmal asynchron)
+    const startSpeaking=()=>{
+      const voice=getBestVoice();
+      window.speechSynthesis.cancel();
+      setSpeaking(true);
+      speakChunks(sentences,voice,0);
+    };
+
+    if(window.speechSynthesis.getVoices().length>0){
+      startSpeaking();
+    } else {
+      window.speechSynthesis.onvoiceschanged=()=>{
+        window.speechSynthesis.onvoiceschanged=null;
+        startSpeaking();
+      };
+    }
   };
 
   useEffect(()=>{ return ()=>{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }; },[]);
