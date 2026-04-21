@@ -1198,6 +1198,13 @@ export default function App() {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [page,setPage]=useState("lernportal"); // "lernportal" | "pruefung" | "abfrage"
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
+  const [showMobileFilter,setShowMobileFilter]=useState(false);
+  useEffect(()=>{
+    const check=()=>setIsMobile(window.innerWidth<768);
+    window.addEventListener("resize",check);
+    return ()=>window.removeEventListener("resize",check);
+  },[]);
   const [showUpload,setShowUpload]=useState(false);
   const [selected,setSelected]=useState(null);
   const [kiItem,setKiItem]=useState(null);
@@ -1250,29 +1257,43 @@ export default function App() {
         @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
         @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0c0c0c}::-webkit-scrollbar-thumb{background:#252525;border-radius:3px}
-        .card{transition:transform .18s,box-shadow .18s;cursor:pointer}.card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
+        .card{transition:transform .18s,box-shadow .18s;cursor:pointer}
+        .card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
         .sbtn{transition:all .15s}.sbtn:hover{color:#ccc!important;background:#111!important}
         .sidebar{transition:width 0.3s ease,opacity 0.3s ease}
         .navbtn{transition:all 0.2s}
         body{margin:0;padding:0;background:#070707}
+        .mobile-bottom-nav{display:none}
+        .mobile-filter-overlay{display:none}
+        @media(max-width:767px){
+          .mobile-bottom-nav{display:flex!important}
+          .mobile-filter-overlay{display:block!important}
+          .desktop-nav{display:none!important}
+          .desktop-sidebar{display:none!important}
+          .desktop-header-left{display:none!important}
+          .mobile-grid{grid-template-columns:1fr!important}
+          body{padding-bottom:70px}
+        }
       `}</style>
 
       {toast&&<div style={{position:"fixed",top:"1.25rem",right:"1.25rem",zIndex:200,background:toast.type==="err"?"#120808":"#081408",border:`1px solid ${toast.type==="err"?"#7b2d2d":"#2d7b4a"}`,borderRadius:"10px",padding:"0.65rem 1.1rem",color:toast.type==="err"?"#e57373":"#66bb6a",fontSize:"0.8rem",animation:"slideDown .25s ease",display:"flex",alignItems:"center",gap:"0.5rem"}}><Icon name={toast.type==="err"?"trash":"check"} size={12}/>{toast.msg}</div>}
 
       {/* Header */}
-      <div style={{borderBottom:"1px solid #111",background:"#090909",padding:"0.75rem 1.75rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem",flexWrap:"wrap",position:"sticky",top:0,zIndex:50}}>
-        <div style={{display:"flex",alignItems:"center",gap:"0.9rem"}}>
-          {page==="lernportal"&&<button onClick={()=>setSideOpen(o=>!o)} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem",cursor:"pointer",color:"#555",flexShrink:0,display:"flex",alignItems:"center",transition:"all 0.2s"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name={sideOpen?"sideOpen":"sideClose"} size={17}/></button>}
-          <div style={{width:"34px",height:"34px",background:"#fff",borderRadius:"9px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="book" size={18}/></div>
-          <div>
-            <div style={{fontFamily:"'Courier New',monospace",fontSize:"1rem",fontWeight:"bold"}}>FISI Lernportal</div>
-            <div style={{fontSize:"0.58rem",color:"#444",letterSpacing:"0.1em"}}>IHK HEILBRONN · {items.length} EINTRÄGE</div>
+      <div style={{borderBottom:"1px solid #111",background:"#090909",padding:isMobile?"0.65rem 1rem":"0.75rem 1.75rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"0.75rem",position:"sticky",top:0,zIndex:50}}>
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:"0.65rem",minWidth:0}}>
+          {!isMobile&&page==="lernportal"&&<button onClick={()=>setSideOpen(o=>!o)} className="desktop-header-left" style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem",cursor:"pointer",color:"#555",flexShrink:0,display:"flex",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name={sideOpen?"sideOpen":"sideClose"} size={17}/></button>}
+          <div style={{width:isMobile?"30px":"34px",height:isMobile?"30px":"34px",background:"#fff",borderRadius:"9px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="book" size={isMobile?16:18}/></div>
+          <div style={{minWidth:0}}>
+            <div style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"0.88rem":"1rem",fontWeight:"bold",whiteSpace:"nowrap"}}>FISI Lernportal</div>
+            <div style={{fontSize:"0.55rem",color:"#444",letterSpacing:"0.08em",whiteSpace:"nowrap"}}>IHK HEILBRONN · {items.length} EINTRÄGE</div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <div style={{display:"flex",gap:"0.4rem",alignItems:"center"}}>
+        {/* Desktop Navigation */}
+        <div className="desktop-nav" style={{display:isMobile?"none":"flex",gap:"0.4rem",alignItems:"center"}}>
           <button onClick={()=>setPage("lernportal")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="lernportal"?"#fff":"transparent",color:page==="lernportal"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="lernportal"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}>
             <Icon name="book" size={14}/>Lernportal
           </button>
@@ -1286,14 +1307,56 @@ export default function App() {
           <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem 0.8rem",color:"#555",cursor:"pointer",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="refresh" size={13}/>Sync</button>
           {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:"0.45rem",background:"#fff",color:"#000",border:"none",borderRadius:"8px",padding:"0.5rem 1rem",fontSize:"0.82rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}><Icon name="plus" size={14}/>Hinzufügen</button>}
         </div>
+
+        {/* Mobile Header rechts */}
+        {isMobile&&<div style={{display:"flex",gap:"0.4rem",alignItems:"center",flexShrink:0}}>
+          {page==="lernportal"&&<button onClick={()=>setShowMobileFilter(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#aaa",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}>
+            ⚙️ Filter
+          </button>}
+          {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{background:"#fff",border:"none",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#000",fontSize:"0.78rem",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.3rem"}}>
+            <Icon name="plus" size={14}/>
+          </button>}
+          <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.5rem",cursor:"pointer",color:"#555",display:"flex",alignItems:"center"}}>
+            <Icon name="refresh" size={15}/>
+          </button>
+        </div>}
       </div>
+
+      {/* Mobile Filter Sheet */}
+      {isMobile&&showMobileFilter&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:200,display:"flex",alignItems:"flex-end"}} onClick={()=>setShowMobileFilter(false)}>
+          <div className="mobile-filter-overlay" style={{width:"100%",background:"#0f0f0f",borderRadius:"20px 20px 0 0",padding:"1.25rem",maxHeight:"75vh",overflowY:"auto",animation:"slideUp 0.25s ease"}} onClick={e=>e.stopPropagation()}>
+            <div style={{width:"36px",height:"4px",background:"#2a2a2a",borderRadius:"2px",margin:"0 auto 1.25rem"}}/>
+            <div style={{fontSize:"0.65rem",letterSpacing:"0.15em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>TYP</div>
+            <div style={{display:"flex",gap:"0.5rem",marginBottom:"1rem",flexWrap:"wrap"}}>
+              {[["Alle",items.length],["text",textCount,"📝"],["file",fileCount,"📎"]].map(([val,cnt,icon])=>(
+                <button key={val} onClick={()=>setFilterType(val)} style={{padding:"0.6rem 1rem",borderRadius:"10px",border:filterType===val?"1px solid #3b82f6":"1px solid #1e1e1e",background:filterType===val?"#0a1a3a":"#141414",color:filterType===val?"#60a5fa":"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",display:"flex",alignItems:"center",gap:"0.3rem"}}>
+                  {icon&&icon}{val==="Alle"?"Alle":val==="text"?"Texte":"Dateien"} ({cnt})
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:"0.65rem",letterSpacing:"0.15em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>KATEGORIEN</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"0.4rem",marginBottom:"1rem"}}>
+              <button onClick={()=>setFilterCat("Alle")} style={{padding:"0.5rem 0.9rem",borderRadius:"20px",border:filterCat==="Alle"?"1px solid #3b82f6":"1px solid #1e1e1e",background:filterCat==="Alle"?"#0a1a3a":"#141414",color:filterCat==="Alle"?"#60a5fa":"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>Alle ({items.length})</button>
+              {CATEGORIES.map(cat=>{const col=CAT_COLORS[cat];const cnt=items.filter(i=>i.category===cat).length;return cnt>0&&(
+                <button key={cat} onClick={()=>setFilterCat(cat)} style={{padding:"0.5rem 0.9rem",borderRadius:"20px",border:filterCat===cat?`1px solid ${col.badge}`:"1px solid #1e1e1e",background:filterCat===cat?`${col.badge}18`:"#141414",color:filterCat===cat?col.badge:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>{cat} ({cnt})</button>
+              );})}
+            </div>
+            <div style={{display:"flex",gap:"0.5rem"}}>
+              <button onClick={()=>setFilterStarred(!filterStarred)} style={{flex:1,padding:"0.7rem",borderRadius:"10px",border:filterStarred?"1px solid #f5c518":"1px solid #1e1e1e",background:filterStarred?"#1a150a":"#141414",color:filterStarred?"#f5c518":"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>⭐ Favoriten</button>
+              <button onClick={()=>{setFilterCat("Alle");setFilterType("Alle");setFilterStarred(false);setSearch("");setShowMobileFilter(false);}} style={{flex:1,padding:"0.7rem",borderRadius:"10px",border:"1px solid #1e1e1e",background:"#141414",color:"#888",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>Zurücksetzen</button>
+            </div>
+            <button onClick={()=>setShowMobileFilter(false)} style={{width:"100%",marginTop:"0.75rem",padding:"0.85rem",borderRadius:"12px",background:"#fff",border:"none",color:"#000",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.9rem",cursor:"pointer"}}>Fertig</button>
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
 
-        {/* Sidebar – nur im Lernportal */}
-        {page==="lernportal"&&(
-          <div className="sidebar" style={{width:sideOpen?"210px":"0px",opacity:sideOpen?1:0,overflow:"hidden",flexShrink:0,borderRight:sideOpen?"1px solid #0f0f0f":"none",background:"#090909"}}>
+        {/* Sidebar – nur im Lernportal, nur auf Desktop */}
+        {page==="lernportal"&&!isMobile&&(
+          <div className="sidebar desktop-sidebar" style={{width:sideOpen?"210px":"0px",opacity:sideOpen?1:0,overflow:"hidden",flexShrink:0,borderRight:sideOpen?"1px solid #0f0f0f":"none",background:"#090909"}}>
             <div style={{width:"210px",padding:"1rem 0.65rem",display:"flex",flexDirection:"column",gap:"2px",overflowY:"auto",height:"100%"}}>
               <SideSection title="TYP">
                 <SideBtn label="Alle" active={filterType==="Alle"} onClick={()=>setFilterType("Alle")} badge={items.length}/>
@@ -1338,15 +1401,15 @@ export default function App() {
 
         {/* Lernportal Seite */}
         {page==="lernportal" && (
-          <div style={{flex:1,padding:"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
+          <div style={{flex:1,padding:isMobile?"0.75rem":"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
             <div style={{position:"relative",marginBottom:"1.1rem"}}>
               <div style={{position:"absolute",left:"0.85rem",top:"50%",transform:"translateY(-50%)",color:"#333",pointerEvents:"none"}}><Icon name="search" size={14}/></div>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Suchen nach Titel, Inhalt, Tags..." style={{width:"100%",background:"#0d0d0d",border:"1px solid #181818",borderRadius:"9px",padding:"0.7rem 1rem 0.7rem 2.4rem",color:"#bbb",fontSize:"0.86rem",outline:"none",fontFamily:"inherit"}}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Suchen nach Titel, Inhalt, Tags..." style={{width:"100%",background:"#0d0d0d",border:"1px solid #181818",borderRadius:"9px",padding:isMobile?"0.85rem 1rem 0.85rem 2.4rem":"0.7rem 1rem 0.7rem 2.4rem",color:"#bbb",fontSize:isMobile?"1rem":"0.86rem",outline:"none",fontFamily:"inherit"}}/>
               {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:"0.7rem",top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#444",cursor:"pointer"}}><Icon name="close" size={12}/></button>}
             </div>
 
             {(filterCat!=="Alle"||filterType!=="Alle"||filterStarred||search)&&(
-              <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginBottom:"0.9rem",alignItems:"center"}}>
+              <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginBottom:"0.75rem",alignItems:"center"}}>
                 <span style={{fontSize:"0.65rem",color:"#555"}}>Filter:</span>
                 {filterCat!=="Alle"&&<span style={{fontSize:"0.7rem",background:`${CAT_COLORS[filterCat]?.badge}15`,color:CAT_COLORS[filterCat]?.badge,padding:"0.2rem 0.6rem",borderRadius:"20px",border:`1px solid ${CAT_COLORS[filterCat]?.badge}30`,cursor:"pointer"}} onClick={()=>setFilterCat("Alle")}>{filterCat} ×</span>}
                 {filterType!=="Alle"&&<span style={{fontSize:"0.7rem",background:"#1a1a1a",color:"#888",padding:"0.2rem 0.6rem",borderRadius:"20px",border:"1px solid #2a2a2a",cursor:"pointer"}} onClick={()=>setFilterType("Alle")}>{filterType==="text"?"📝 Texte":"📎 Dateien"} ×</span>}
@@ -1369,14 +1432,14 @@ export default function App() {
             )}
 
             {!loading&&filtered.length>0&&(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(285px,1fr))",gap:"0.9rem"}}>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(285px,1fr))",gap:isMobile?"0.75rem":"0.9rem"}}>
                 {filtered.map(item=>{
                   const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
                   const fi=item.file_name?getFileInfo(item.file_name):null;
                   const preview=item.type==="text"?(item.content||"").slice(0,120)+"…":item.file_name;
                   const videos=item.youtube_links||[];
                   return(
-                    <div key={item.id} className="card" style={{background:`linear-gradient(150deg,${col.bg}cc,#0a0a0a)`,border:`1px solid ${col.badge}18`,borderRadius:"12px",padding:"1.1rem",position:"relative",overflow:"hidden"}}>
+                    <div key={item.id} className="card" style={{background:`linear-gradient(150deg,${col.bg}cc,#0a0a0a)`,border:`1px solid ${col.badge}18`,borderRadius:"12px",padding:isMobile?"1.25rem":"1.1rem",position:"relative",overflow:"hidden"}}>
                       <div style={{position:"absolute",top:0,left:0,right:0,height:"2px",background:`linear-gradient(90deg,${col.badge},transparent 70%)`}}/>
                       {item.starred&&<div style={{position:"absolute",top:"0.7rem",right:"0.7rem",color:"#f5c518"}}><Icon name="star" size={12}/></div>}
                       <div style={{display:"flex",gap:"0.4rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
@@ -1384,11 +1447,11 @@ export default function App() {
                         {fi&&<span style={{fontSize:"0.56rem",color:fi.color,background:`${fi.color}10`,padding:"0.16rem 0.45rem",borderRadius:"4px",border:`1px solid ${fi.color}22`,fontWeight:"bold"}}>{fi.icon} {fi.label}</span>}
                         {videos.length>0&&<span style={{fontSize:"0.56rem",color:"#ef4444",background:"#ef444410",padding:"0.16rem 0.45rem",borderRadius:"4px",border:"1px solid #ef444422",fontWeight:"bold"}}>🎬{videos.length}</span>}
                       </div>
-                      <div onClick={()=>setSelected(item)} style={{fontFamily:"'Courier New',monospace",fontSize:"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
+                      <div onClick={()=>setSelected(item)} style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"1rem":"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
                       <div onClick={()=>setSelected(item)} style={{fontSize:"0.74rem",color:"#4a4a4a",lineHeight:"1.6",fontFamily:"'Courier New',monospace"}}>{preview}</div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"0.85rem",paddingTop:"0.65rem",borderTop:`1px solid ${col.badge}10`}}>
                         <div style={{display:"flex",gap:"0.25rem",flexWrap:"wrap"}}>
-                          <button onClick={e=>{e.stopPropagation();setKiItem(item);}} title="KI Hilfe" style={{background:`${col.badge}12`,border:`1px solid ${col.badge}30`,borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:col.badge,fontSize:"0.65rem",fontWeight:"bold"}}>🤖</button>
+                          <button onClick={e=>{e.stopPropagation();setKiItem(item);}} title="KI Hilfe" style={{background:`${col.badge}12`,border:`1px solid ${col.badge}30`,borderRadius:"7px",padding:isMobile?"0.4rem 0.6rem":"0.2rem 0.4rem",cursor:"pointer",color:col.badge,fontSize:isMobile?"0.75rem":"0.65rem",fontWeight:"bold"}}>🤖</button>
                           <button onClick={e=>{e.stopPropagation();setYoutubeItem(item);}} title="Videos" style={{background:"#ef444412",border:"1px solid #ef444430",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#ef4444",fontSize:"0.65rem"}}>🎬</button>
                           {item.type==="text"&&<>
                             <button onClick={e=>{e.stopPropagation();generatePDF(item);}} style={{background:"none",border:"1px solid #3a1a1a",borderRadius:"5px",padding:"0.2rem 0.4rem",cursor:"pointer",color:"#ef4444",fontSize:"0.65rem"}}><Icon name="pdf" size={10}/></button>
@@ -1405,6 +1468,24 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile&&(
+        <div className="mobile-bottom-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"#090909",borderTop:"1px solid #1a1a1a",padding:"0.5rem 0.25rem",display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:100,paddingBottom:"env(safe-area-inset-bottom,0.5rem)"}}>
+          {[
+            {id:"lernportal",icon:"book",label:"Lernen",color:"#fff"},
+            {id:"pruefung",icon:"pruefung",label:"Prüfung",color:"#eab308"},
+            {id:"abfrage",icon:"quiz",label:"Abfrage",color:"#a855f7"},
+          ].map(tab=>(
+            <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
+              <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent",transition:"all 0.2s"}}>
+                <Icon name={tab.icon} size={18}/>
+              </div>
+              <span style={{fontSize:"0.6rem",fontWeight:page===tab.id?"bold":"normal",letterSpacing:"0.02em"}}>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onRefresh={loadItems}/>}
       {selected&&<DetailModal item={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
