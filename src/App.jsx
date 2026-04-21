@@ -179,7 +179,7 @@ function KIChatModal({ item, onClose }) {
     callKI(first,systemPrompt).then(reply=>{ setMessages([...first,{role:"assistant",content:reply}]); setLoading(false); }).catch(e=>{ setMessages([...first,{role:"assistant",content:"❌ "+e.message}]); setLoading(false); });
   };
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#080808",border:`1px solid ${col.badge}40`,borderRadius:"16px",width:"100%",maxWidth:"720px",height:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"1rem 1.5rem",borderBottom:`1px solid ${col.badge}20`,background:`linear-gradient(135deg,${col.bg}cc,#080808)`,flexShrink:0}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -236,7 +236,7 @@ function YouTubeModal({ item, onClose, onSave }) {
   const addVideo=()=>{ const id=getYouTubeId(url); if(!id){alert("Ungültige YouTube-URL!");return;} setVideos(v=>[...v,{url,title:title||"Video",id}]); setUrl(""); setTitle(""); };
   const handleSave=async()=>{ await supabase.from(TABLE).update({youtube_links:videos}).eq("id",item.id); onSave({...item,youtube_links:videos}); setSaved(true); setTimeout(()=>{setSaved(false);onClose();},800); };
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:110,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"700px",maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"1rem 1.5rem",borderBottom:`1px solid ${col.badge}18`,background:`linear-gradient(135deg,${col.bg}cc,#080808)`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div><div style={{fontSize:"0.7rem",color:"#ef4444",fontWeight:"bold",letterSpacing:"0.1em"}}>🎬 YOUTUBE VIDEOS</div><div style={{fontSize:"0.9rem",color:"#ccc",fontFamily:"'Courier New',monospace",fontWeight:"bold"}}>{item.title}</div></div>
@@ -962,7 +962,7 @@ function UploadModal({ onClose, onRefresh }) {
     setUploading(false);
   };
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",backdropFilter:"blur(10px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#0a0a0a",border:"1px solid #1e1e1e",borderRadius:"16px",width:"100%",maxWidth:"700px",maxHeight:"93vh",overflow:"auto"}}>
         <div style={{padding:"1.25rem 1.75rem",borderBottom:"1px solid #141414",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"#0a0a0a",zIndex:10}}>
           <div style={{fontSize:"1.1rem",fontWeight:"bold",fontFamily:"'Courier New',monospace"}}>Neuer Eintrag</div>
@@ -1082,10 +1082,14 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
     else{window.speechSynthesis.onvoiceschanged=()=>{window.speechSynthesis.onvoiceschanged=null;start();};}
   };
 
-  useEffect(()=>{ return ()=>{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }; },[]);
+  useEffect(()=>{
+    return ()=>{
+      try{ if(window.speechSynthesis&&speaking) window.speechSynthesis.cancel(); }catch(e){}
+    };
+  },[speaking]);
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",backdropFilter:"blur(12px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"820px",maxHeight:"93vh",overflow:"auto"}}>
         <div style={{padding:"1.25rem 1.75rem",borderBottom:`1px solid ${col.badge}18`,background:`linear-gradient(135deg,${col.bg}bb,#080808)`,position:"sticky",top:0,zIndex:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"1rem"}}>
@@ -1336,7 +1340,7 @@ export default function App() {
 
       {/* Mobile Filter Sheet */}
       {isMobile&&showMobileFilter&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:200,display:"flex",alignItems:"flex-end"}} onClick={()=>setShowMobileFilter(false)}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",alignItems:"flex-end"}} onClick={()=>setShowMobileFilter(false)}>
           <div className="mobile-filter-overlay" style={{width:"100%",background:"#0f0f0f",borderRadius:"20px 20px 0 0",padding:"1.25rem",maxHeight:"75vh",overflowY:"auto",animation:"slideUp 0.25s ease"}} onClick={e=>e.stopPropagation()}>
             <div style={{width:"36px",height:"4px",background:"#2a2a2a",borderRadius:"2px",margin:"0 auto 1.25rem"}}/>
             <div style={{fontSize:"0.65rem",letterSpacing:"0.15em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>TYP</div>
@@ -1459,7 +1463,7 @@ export default function App() {
                         {fi&&<span style={{fontSize:"0.56rem",color:fi.color,background:`${fi.color}10`,padding:"0.16rem 0.45rem",borderRadius:"4px",border:`1px solid ${fi.color}22`,fontWeight:"bold"}}>{fi.icon} {fi.label}</span>}
                         {videos.length>0&&<span style={{fontSize:"0.56rem",color:"#ef4444",background:"#ef444410",padding:"0.16rem 0.45rem",borderRadius:"4px",border:"1px solid #ef444422",fontWeight:"bold"}}>🎬{videos.length}</span>}
                       </div>
-                      <div onClick={()=>setSelected(item)} style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"1rem":"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
+                      <div onClick={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(item); }} style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"1rem":"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
                       <div onClick={()=>setSelected(item)} style={{fontSize:"0.74rem",color:"#4a4a4a",lineHeight:"1.6",fontFamily:"'Courier New',monospace"}}>{preview}</div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"0.85rem",paddingTop:"0.65rem",borderTop:`1px solid ${col.badge}10`}}>
                         <div style={{display:"flex",gap:"0.25rem",flexWrap:"wrap"}}>
@@ -1500,7 +1504,7 @@ export default function App() {
       )}
 
       {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onRefresh={loadItems}/>}
-      {selected&&<DetailModal item={selected} onClose={()=>setSelected(null)} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
+      {selected&&<DetailModal item={selected} onClose={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(null); }} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
       {kiItem&&<KIChatModal item={kiItem} onClose={()=>setKiItem(null)}/>}
       {youtubeItem&&<YouTubeModal item={youtubeItem} onClose={()=>setYoutubeItem(null)} onSave={handleYouTubeSave}/>}
     </div>
