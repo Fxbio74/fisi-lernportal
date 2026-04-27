@@ -1,3 +1,4 @@
+// v2.1 - fortschritt props fix
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
