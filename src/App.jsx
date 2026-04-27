@@ -1320,6 +1320,9 @@ export default function App() {
     setLoading(false);
   };
   useEffect(()=>{ if(loggedIn) loadItems(); },[loggedIn]);
+
+  // Login Screen - early return nach allen Definitionen
+  if(!loggedIn) return <LoginScreen onLogin={()=>{ setLoggedIn(true); loadItems(); }}/>;
   const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
   const handleStar=async(id,starred)=>{await supabase.from(TABLE).update({starred}).eq("id",id);setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));};
   const handleYouTubeSave=(u)=>{setItems(p=>p.map(i=>i.id===u.id?u:i));if(selected?.id===u.id)setSelected(u);};
@@ -1345,7 +1348,6 @@ export default function App() {
 
   return(
     <div style={{minHeight:"100vh",background:"#070707",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
-      {!loggedIn&&<LoginScreen onLogin={()=>{ setLoggedIn(true); loadItems(); }}/>}
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
