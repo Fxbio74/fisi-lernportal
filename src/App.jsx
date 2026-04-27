@@ -40,6 +40,58 @@ function getYouTubeId(url) {
   return null;
 }
 
+// ── Markdown Renderer ─────────────────────────────────────────────────────────
+function inlineMarkdown(text) {
+  if (!text) return null;
+  const parts = [];
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let last = 0, m;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const c = m[0];
+    if (c.startsWith('`')) parts.push(<code key={m.index} style={{background:"#141414",border:"1px solid #222",borderRadius:"4px",padding:"0.1rem 0.35rem",fontFamily:"'Courier New',monospace",fontSize:"0.82em",color:"#a0c4ff"}}>{c.slice(1,-1)}</code>);
+    else if (c.startsWith('**')) parts.push(<strong key={m.index} style={{color:"#eee",fontWeight:"bold"}}>{c.slice(2,-2)}</strong>);
+    else if (c.startsWith('*')) parts.push(<em key={m.index} style={{color:"#ccc",fontStyle:"italic"}}>{c.slice(1,-1)}</em>);
+    last = m.index + c.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
+      elements.push(<pre key={`cb${i}`} style={{background:"#0a0a0a",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.9rem 1.1rem",overflowX:"auto",fontFamily:"'Courier New',monospace",fontSize:"0.82rem",color:"#a0c4ff",lineHeight:1.6,margin:"0.5rem 0"}}>{codeLines.join('\n')}</pre>);
+      i++; continue;
+    }
+    if (line.startsWith('### ')) { elements.push(<h3 key={`h${i}`} style={{fontSize:"0.88rem",color:"#eee",fontWeight:"bold",margin:"0.9rem 0 0.3rem",fontFamily:"'Courier New',monospace"}}>{inlineMarkdown(line.slice(4))}</h3>); i++; continue; }
+    if (line.startsWith('## ')) { elements.push(<h2 key={`h${i}`} style={{fontSize:"1rem",color:"#fff",fontWeight:"bold",margin:"1rem 0 0.4rem",fontFamily:"'Courier New',monospace",borderBottom:"1px solid #1e1e1e",paddingBottom:"0.25rem"}}>{inlineMarkdown(line.slice(3))}</h2>); i++; continue; }
+    if (line.startsWith('# ')) { elements.push(<h1 key={`h${i}`} style={{fontSize:"1.1rem",color:"#fff",fontWeight:"bold",margin:"1.1rem 0 0.5rem",fontFamily:"'Courier New',monospace"}}>{inlineMarkdown(line.slice(2))}</h1>); i++; continue; }
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      const its = [];
+      while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* '))) { its.push(<li key={i} style={{marginBottom:"0.2rem",color:"#b0b0b0",lineHeight:1.7}}>{inlineMarkdown(lines[i].slice(2))}</li>); i++; }
+      elements.push(<ul key={`ul${i}`} style={{paddingLeft:"1.3rem",margin:"0.4rem 0 0.6rem",listStyleType:"disc"}}>{its}</ul>); continue;
+    }
+    if (/^\d+\.\s/.test(line)) {
+      const its = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) { its.push(<li key={i} style={{marginBottom:"0.2rem",color:"#b0b0b0",lineHeight:1.7}}>{inlineMarkdown(lines[i].replace(/^\d+\.\s/,''))}</li>); i++; }
+      elements.push(<ol key={`ol${i}`} style={{paddingLeft:"1.3rem",margin:"0.4rem 0 0.6rem"}}>{its}</ol>); continue;
+    }
+    if (line.match(/^---+$/)) { elements.push(<hr key={`hr${i}`} style={{border:"none",borderTop:"1px solid #1e1e1e",margin:"0.6rem 0"}}/>); i++; continue; }
+    if (line.trim() === '') { if (elements.length > 0) elements.push(<div key={`sp${i}`} style={{height:"0.4rem"}}/>); i++; continue; }
+    elements.push(<p key={`p${i}`} style={{fontSize:"0.87rem",color:"#b0b0b0",lineHeight:1.85,margin:"0.1rem 0"}}>{inlineMarkdown(line)}</p>);
+    i++;
+  }
+  return <div>{elements}</div>;
+}
+
 // ── KI API Call ───────────────────────────────────────────────────────────────
 async function callKI(messages, system) {
   const res = await fetch("/api/chat", {
@@ -152,10 +204,13 @@ const Icon = ({ name, size=18 }) => {
     youtube:   <svg width={size} height={size} viewBox="0 0 24 24" fill="#ef4444" stroke="none"><path d="M22.54 6.42a2.78 2.78 0 00-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46A2.78 2.78 0 001.46 6.42 29 29 0 001 12a29 29 0 00.46 5.58 2.78 2.78 0 001.95 1.96C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 001.95-1.96A29 29 0 0023 12a29 29 0 00-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></svg>,
     pruefung:  <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
     zap:       <svg width={size} height={size} viewBox="0 0 24 24" {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+    clock:     <svg width={size} height={size} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    chart:     <svg width={size} height={size} viewBox="0 0 24 24" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+    repeat:    <svg width={size} height={size} viewBox="0 0 24 24" {...p}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
+    note:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
   };
   return icons[name]||null;
 };
-
 // ── KI Chat Modal ─────────────────────────────────────────────────────────────
 function KIChatModal({ item, onClose }) {
   const [messages,setMessages]=useState([]);
@@ -207,11 +262,17 @@ function KIChatModal({ item, onClose }) {
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"1.25rem 1.5rem",display:"flex",flexDirection:"column",gap:"1rem"}}>
           {messages.length===0&&!loading&&<div style={{textAlign:"center",padding:"3rem",color:"#333"}}><div style={{fontSize:"2.5rem",marginBottom:"0.5rem"}}>🤖</div><div style={{fontSize:"0.85rem"}}>Wähle einen Modus!</div></div>}
-          {messages.filter(m=>m.role==="assistant").map((msg,i)=>(
-            <div key={i} style={{display:"flex",gap:"0.6rem"}}>
-              <div style={{width:"26px",height:"26px",background:`${col.badge}20`,border:`1px solid ${col.badge}30`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge,flexShrink:0,marginTop:"2px"}}><Icon name="bot" size={13}/></div>
-              <div style={{maxWidth:"90%",padding:"0.75rem 1rem",background:"#111",border:"1px solid #1e1e1e",borderRadius:"14px 14px 14px 4px",fontSize:"0.85rem",color:"#ccc",lineHeight:"1.7",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{msg.content}</div>
-            </div>
+          {messages.map((msg,i)=>(
+            msg.role==="user" ? (
+              <div key={i} style={{display:"flex",justifyContent:"flex-end"}}>
+                <div style={{maxWidth:"80%",padding:"0.65rem 1rem",background:`${col.badge}18`,border:`1px solid ${col.badge}30`,borderRadius:"14px 14px 4px 14px",fontSize:"0.85rem",color:col.badge,lineHeight:"1.7",wordBreak:"break-word"}}>{msg.content}</div>
+              </div>
+            ) : (
+              <div key={i} style={{display:"flex",gap:"0.6rem"}}>
+                <div style={{width:"26px",height:"26px",background:`${col.badge}20`,border:`1px solid ${col.badge}30`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge,flexShrink:0,marginTop:"2px"}}><Icon name="bot" size={13}/></div>
+                <div style={{maxWidth:"90%",padding:"0.75rem 1rem",background:"#111",border:"1px solid #1e1e1e",borderRadius:"14px 14px 14px 4px",fontSize:"0.85rem",color:"#ccc",lineHeight:"1.7",wordBreak:"break-word"}}>{renderMarkdown(msg.content)}</div>
+              </div>
+            )
           ))}
           {loading&&<div style={{display:"flex",gap:"0.6rem"}}><div style={{width:"26px",height:"26px",background:`${col.badge}20`,border:`1px solid ${col.badge}30`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:col.badge,flexShrink:0}}><Icon name="bot" size={13}/></div><div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:"14px 14px 14px 4px",padding:"0.75rem 1rem",display:"flex",gap:"4px",alignItems:"center"}}>{[0,1,2].map(n=><div key={n} style={{width:"6px",height:"6px",borderRadius:"50%",background:col.badge,animation:`bounce 1.2s infinite ${n*0.2}s`}}/>)}</div></div>}
           <div ref={bottomRef}/>
@@ -270,59 +331,60 @@ function YouTubeModal({ item, onClose, onSave }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── PRÜFUNGS-GENERATOR (neuer Menüpunkt) ─────────────────────────────────────
+// ── PRÜFUNGS-GENERATOR ───────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 function PruefungsGenerator({ items }) {
-  const [step, setStep] = useState("config"); // config | generating | pruefung | ergebnis
+  const [step, setStep] = useState("config");
   const [selCats, setSelCats] = useState([]);
   const [selThemen, setSelThemen] = useState([]);
   const [anzahl, setAnzahl] = useState(10);
   const [schwierigkeit, setSchwierigkeit] = useState("Mittel");
-  const [mcAnteil, setMcAnteil] = useState(70); // % Multiple Choice
+  const [mcAnteil, setMcAnteil] = useState(70);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [genProgress, setGenProgress] = useState("");
   const [showLoesung, setShowLoesung] = useState(false);
+  const [zeitLimit, setZeitLimit] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    if (step === "pruefung" && zeitLimit > 0) {
+      setTimeLeft(zeitLimit * 60);
+      timerRef.current = setInterval(() => {
+        setTimeLeft(t => {
+          if (t <= 1) { clearInterval(timerRef.current); setSubmitted(true); return 0; }
+          return t - 1;
+        });
+      }, 1000);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      if (step !== "pruefung") setTimeLeft(null);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [step]);
 
   const textItems = items.filter(i => i.type === "text" && i.content);
   const catCounts = CATEGORIES.reduce((a,c) => { a[c]=textItems.filter(i=>i.category===c).length; return a; }, {});
-
-  // Alle Themen der ausgewählten Kategorien
-  const themenInCats = selCats.length > 0
-    ? textItems.filter(i => selCats.includes(i.category))
-    : [];
+  const themenInCats = selCats.length > 0 ? textItems.filter(i => selCats.includes(i.category)) : [];
 
   const toggleCat = (cat) => {
     setSelCats(p => p.includes(cat) ? p.filter(c=>c!==cat) : [...p,cat]);
-    // Themen dieser Kategorie aus selThemen entfernen wenn Kategorie abgewählt
     if (selCats.includes(cat)) {
-      setSelThemen(p => p.filter(id => {
-        const item = textItems.find(i=>i.id===id);
-        return item?.category !== cat;
-      }));
+      setSelThemen(p => p.filter(id => { const item = textItems.find(i=>i.id===id); return item?.category !== cat; }));
     }
   };
-
   const toggleThema = (id) => setSelThemen(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
-
-  // Alle ausgewählten Items zusammenstellen
-  const selectedItems = [
-    ...themenInCats,
-    ...textItems.filter(i => selThemen.includes(i.id) && !selCats.includes(i.category))
-  ];
+  const selectedItems = [...themenInCats, ...textItems.filter(i => selThemen.includes(i.id) && !selCats.includes(i.category))];
 
   const generatePruefung = async () => {
     if (selectedItems.length === 0) { alert("Bitte mindestens eine Kategorie oder ein Thema auswählen!"); return; }
     setStep("generating"); setGenProgress("KI analysiert ausgewählte Themen...");
-
     const mcCount = Math.round(anzahl * mcAnteil / 100);
     const textCount = anzahl - mcCount;
-
     const context = selectedItems.map(i => `### ${i.title} (${i.category})\n${(i.content||"").substring(0,800)}`).join("\n\n");
-
     const systemPrompt = `Du bist ein IHK-Pruefungsersteller fuer Fachinformatiker Systemintegration, IHK Heilbronn. Erstelle eine realistische Abschlusspruefung. Antworte NUR mit validem JSON-Array, kein Text davor oder danach, keine Markdown-Backticks.`;
-
     const userMsg = `Erstelle eine FISI IHK-Pruefung mit genau ${anzahl} Fragen (${mcCount} Multiple Choice + ${textCount} Freitext-Fragen).
 Schwierigkeit: ${schwierigkeit}
 Themen und Inhalte:
@@ -330,34 +392,17 @@ ${context}
 
 JSON-Format (NUR das Array, kein anderer Text):
 [
-  {
-    "type": "mc",
-    "question": "Frage?",
-    "options": ["Option A","Option B","Option C","Option D"],
-    "correct": 0,
-    "explanation": "Begruendung",
-    "thema": "Themenname"
-  },
-  {
-    "type": "text",
-    "question": "Freitext-Frage?",
-    "musterpunkte": ["Punkt 1 der erwartet wird","Punkt 2"],
-    "thema": "Themenname"
-  }
+  {"type":"mc","question":"Frage?","options":["Option A","Option B","Option C","Option D"],"correct":0,"explanation":"Begruendung","thema":"Themenname"},
+  {"type":"text","question":"Freitext-Frage?","musterpunkte":["Punkt 1","Punkt 2"],"thema":"Themenname"}
 ]
 
-Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit type="text". Fragen sollen typisch fuer IHK-Pruefungen sein.`;
-
+Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit type="text".`;
     try {
       setGenProgress("KI generiert Prüfungsfragen...");
       const reply = await callKI([{role:"user",content:userMsg}], systemPrompt);
       const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed = JSON.parse(clean);
-      setQuestions(parsed);
-      setAnswers({});
-      setSubmitted(false);
-      setShowLoesung(false);
-      setStep("pruefung");
+      setQuestions(parsed); setAnswers({}); setSubmitted(false); setShowLoesung(false); setStep("pruefung");
     } catch(e) {
       alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
       setStep("config");
@@ -368,21 +413,16 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
   const mcScore = submitted ? mcQuestions.filter(q => { const i=questions.indexOf(q); return answers[i]===q.correct; }).length : 0;
   const mcPercent = mcQuestions.length > 0 ? Math.round((mcScore/mcQuestions.length)*100) : 0;
   const allAnswered = questions.every((q,i) => q.type==="mc" ? answers[i]!==undefined : answers[i]?.trim()?.length>0);
-
   const pruefungTitle = `FISI Prüfung – ${selCats.length>0?selCats.join(", "):"Ausgewählte Themen"} (${schwierigkeit})`;
 
   return (
     <div style={{flex:1, overflowY:"auto", padding:"1.5rem 2rem", minWidth:0}}>
-
-      {/* ── Konfiguration ── */}
       {step==="config" && (
         <div style={{maxWidth:"900px"}}>
           <div style={{marginBottom:"2rem"}}>
             <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.4rem",fontWeight:"bold",color:"#fff",marginBottom:"0.3rem"}}>Prüfung erstellen</div>
             <div style={{fontSize:"0.82rem",color:"#555"}}>Wähle Kategorien und Themen aus – die KI generiert automatisch eine vollständige IHK-Prüfung</div>
           </div>
-
-          {/* Schritt 1: Kategorien */}
           <div style={{marginBottom:"1.75rem"}}>
             <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>SCHRITT 1 – KATEGORIEN AUSWÄHLEN</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:"0.6rem"}}>
@@ -397,8 +437,6 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
               })}
             </div>
           </div>
-
-          {/* Schritt 2: Einzelne Themen */}
           <div style={{marginBottom:"1.75rem"}}>
             <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>SCHRITT 2 – EINZELNE THEMEN (OPTIONAL)</div>
             <div style={{fontSize:"0.78rem",color:"#444",marginBottom:"0.75rem"}}>Themen aus nicht ausgewählten Kategorien einzeln hinzufügen:</div>
@@ -408,9 +446,7 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                 return(
                   <button key={item.id} onClick={()=>toggleThema(item.id)} style={{display:"flex",alignItems:"center",gap:"0.75rem",padding:"0.5rem 0.75rem",borderRadius:"8px",border:active?`1px solid ${col.badge}40`:"1px solid transparent",background:active?`${col.badge}10`:"transparent",cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"all 0.15s"}} onMouseEnter={e=>!active&&(e.currentTarget.style.background="#111")} onMouseLeave={e=>!active&&(e.currentTarget.style.background="transparent")}>
                     <div style={{width:"10px",height:"10px",borderRadius:"50%",background:active?col.badge:"#2a2a2a",flexShrink:0,transition:"all 0.15s"}}/>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:"0.82rem",color:active?col.badge:"#888",fontWeight:active?"bold":"normal"}}>{item.title}</div>
-                    </div>
+                    <div style={{flex:1}}><div style={{fontSize:"0.82rem",color:active?col.badge:"#888",fontWeight:active?"bold":"normal"}}>{item.title}</div></div>
                     <span style={{fontSize:"0.65rem",color:col.badge,background:`${col.badge}15`,padding:"0.1rem 0.4rem",borderRadius:"4px"}}>{item.category}</span>
                   </button>
                 );
@@ -418,8 +454,6 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
               {textItems.filter(i=>!selCats.includes(i.category)).length===0&&<div style={{textAlign:"center",padding:"1rem",color:"#333",fontSize:"0.8rem"}}>Alle Kategorien bereits ausgewählt</div>}
             </div>
           </div>
-
-          {/* Ausgewählt Übersicht */}
           {selectedItems.length > 0 && (
             <div style={{background:"#0a1a0a",border:"1px solid #1a3a1a",borderRadius:"10px",padding:"1rem",marginBottom:"1.75rem"}}>
               <div style={{fontSize:"0.7rem",color:"#22c55e",letterSpacing:"0.15em",marginBottom:"0.5rem",fontWeight:"bold"}}>✓ AUSGEWÄHLT ({selectedItems.length} THEMEN)</div>
@@ -428,8 +462,6 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
               </div>
             </div>
           )}
-
-          {/* Schritt 3: Einstellungen */}
           <div style={{marginBottom:"1.75rem"}}>
             <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>SCHRITT 3 – PRÜFUNGSEINSTELLUNGEN</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"1rem"}}>
@@ -454,45 +486,46 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                 <input type="range" min="0" max="100" step="10" value={mcAnteil} onChange={e=>setMcAnteil(+e.target.value)} style={{width:"100%",accentColor:"#3b82f6",marginTop:"0.5rem"}}/>
               </div>
             </div>
+            <div style={{marginTop:"1rem"}}>
+              <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.5rem"}}>Zeitlimit</div>
+              <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap"}}>
+                {[{l:"Kein Limit",v:0},{l:"30 Min",v:30},{l:"60 Min",v:60},{l:"90 Min",v:90},{l:"120 Min",v:120}].map(o=>(
+                  <button key={o.v} onClick={()=>setZeitLimit(o.v)} style={{padding:"0.5rem 0.8rem",borderRadius:"8px",border:zeitLimit===o.v?"1px solid #a855f7":"1px solid #1e1e1e",background:zeitLimit===o.v?"#1a0a2e":"#0f0f0f",color:zeitLimit===o.v?"#a855f7":"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.78rem"}}>{o.l}</button>
+                ))}
+              </div>
+            </div>
           </div>
-
-          {/* Generate Button */}
-          <button onClick={generatePruefung} disabled={selectedItems.length===0} style={{width:"100%",padding:"1.1rem",borderRadius:"12px",background:selectedItems.length>0?"#3b82f6":"#1a1a1a",border:"none",color:selectedItems.length>0?"#fff":"#444",fontSize:"1rem",fontWeight:"bold",cursor:selectedItems.length>0?"pointer":"not-allowed",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.6rem",transition:"all 0.2s"}}>
-            <Icon name="zap" size={18}/>
-            {selectedItems.length>0?`Prüfung generieren – ${anzahl} Fragen aus ${selectedItems.length} Themen`:"Bitte zuerst Themen auswählen"}
+          <button onClick={generatePruefung} disabled={selectedItems.length===0} style={{width:"100%",padding:"1.1rem",borderRadius:"12px",background:selectedItems.length>0?"#3b82f6":"#1a1a1a",border:"none",color:selectedItems.length>0?"#fff":"#444",fontSize:"1rem",fontWeight:"bold",cursor:selectedItems.length>0?"pointer":"not-allowed",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.6rem"}}>
+            <Icon name="zap" size={18}/>{selectedItems.length>0?`Prüfung generieren – ${anzahl} Fragen aus ${selectedItems.length} Themen`:"Bitte zuerst Themen auswählen"}
           </button>
         </div>
       )}
-
-      {/* ── Generating ── */}
       {step==="generating" && (
         <div style={{textAlign:"center",padding:"5rem 2rem"}}>
           <div style={{fontSize:"3rem",marginBottom:"1.5rem"}}>⚙️</div>
           <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.1rem",color:"#fff",marginBottom:"0.75rem"}}>{genProgress}</div>
           <div style={{fontSize:"0.82rem",color:"#555",marginBottom:"2rem"}}>Das kann 10-20 Sekunden dauern...</div>
-          <div style={{display:"flex",gap:"8px",justifyContent:"center"}}>
-            {[0,1,2,3,4].map(n=><div key={n} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#3b82f6",animation:`bounce 1.2s infinite ${n*0.15}s`}}/>)}
-          </div>
+          <div style={{display:"flex",gap:"8px",justifyContent:"center"}}>{[0,1,2,3,4].map(n=><div key={n} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#3b82f6",animation:`bounce 1.2s infinite ${n*0.15}s`}}/>)}</div>
         </div>
       )}
-
-      {/* ── Prüfung ablegen ── */}
       {(step==="pruefung"||step==="ergebnis") && (
         <div style={{maxWidth:"820px"}}>
-          {/* Header */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.5rem",flexWrap:"wrap",gap:"0.75rem"}}>
             <div>
               <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.1rem",fontWeight:"bold",color:"#fff"}}>{pruefungTitle}</div>
               <div style={{fontSize:"0.78rem",color:"#555",marginTop:"0.2rem"}}>{questions.length} Fragen · {mcQuestions.length} Multiple Choice · {questions.length-mcQuestions.length} Freitext</div>
             </div>
+            {zeitLimit>0&&!submitted&&timeLeft!==null&&(
+              <div style={{fontSize:"1.5rem",fontWeight:"bold",fontFamily:"'Courier New',monospace",color:timeLeft<300?"#ef4444":timeLeft<600?"#eab308":"#22c55e",background:"#0f0f0f",border:`1px solid ${timeLeft<300?"#ef4444":"#1e1e1e"}`,borderRadius:"10px",padding:"0.4rem 1rem",display:"flex",alignItems:"center",gap:"0.5rem"}}>
+                <Icon name="clock" size={16}/>{String(Math.floor(timeLeft/60)).padStart(2,"0")}:{String(timeLeft%60).padStart(2,"0")}
+              </div>
+            )}
             <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
               {submitted&&<button onClick={()=>setShowLoesung(l=>!l)} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:showLoesung?"#1a2a3a":"#0f0f0f",border:"1px solid #2a3a4a",color:"#60a5fa",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>{showLoesung?"Lösung ausblenden":"Lösung anzeigen"}</button>}
               {submitted&&<button onClick={()=>exportPruefungPDF(pruefungTitle,questions,answers,submitted,showLoesung)} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:"none",border:"1px solid #3a1a1a",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="pdf" size={13}/>PDF Export</button>}
               <button onClick={()=>{setStep("config");setQuestions([]);setAnswers({});setSubmitted(false);}} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:"#0f0f0f",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>← Neue Prüfung</button>
             </div>
           </div>
-
-          {/* Ergebnis-Banner */}
           {submitted&&(
             <div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:mcPercent>=80?"#0a2e1a":mcPercent>=50?"#2e2a00":"#2e0a0a",border:`1px solid ${mcPercent>=80?"#22c55e":mcPercent>=50?"#eab308":"#ef4444"}`}}>
               <div style={{fontSize:"2.2rem",fontWeight:"bold",color:mcPercent>=80?"#22c55e":mcPercent>=50?"#eab308":"#ef4444"}}>{mcScore}/{mcQuestions.length} MC-Fragen</div>
@@ -500,8 +533,6 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
               {questions.some(q=>q.type==="text")&&<div style={{fontSize:"0.8rem",color:"#888",marginTop:"0.5rem"}}>Freitext-Fragen: Vergleiche deine Antworten mit den Musterpunkten</div>}
             </div>
           )}
-
-          {/* Fragen */}
           {questions.map((q,i)=>{
             const ismc=q.type==="mc";
             const isCorrect=submitted&&ismc&&answers[i]===q.correct;
@@ -515,14 +546,12 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                     {submitted&&ismc&&<span style={{marginRight:"0.4rem"}}>{isCorrect?"✅":"❌"}</span>}{i+1}. {q.question}
                   </div>
                 </div>
-
-                {/* Multiple Choice */}
                 {ismc&&(
                   <div style={{display:"flex",flexDirection:"column",gap:"0.4rem"}}>
                     {q.options.map((opt,j)=>{
                       const isSel=answers[i]===j; const isRight=submitted&&j===q.correct; const isSelWrong=submitted&&isSel&&j!==q.correct;
                       return(
-                        <button key={j} onClick={()=>!submitted&&setAnswers(a=>({...a,[i]:j}))} style={{padding:"0.6rem 0.9rem",borderRadius:"8px",border:`1px solid ${isRight?"#22c55e":isSelWrong?"#ef4444":isSel?"#3b82f6":"#2a2a2a"}`,background:isRight?"#0a2e1a":isSelWrong?"#2e0a0a":isSel?"#0a1a2e":"#0a0a0a",color:isRight?"#22c55e":isSelWrong?"#ef4444":isSel?"#60a5fa":"#888",cursor:submitted?"default":"pointer",textAlign:"left",fontFamily:"inherit",fontSize:"0.82rem",transition:"all 0.15s"}}>
+                        <button key={j} onClick={()=>!submitted&&setAnswers(a=>({...a,[i]:j}))} style={{padding:"0.6rem 0.9rem",borderRadius:"8px",border:`1px solid ${isRight?"#22c55e":isSelWrong?"#ef4444":isSel?"#3b82f6":"#2a2a2a"}`,background:isRight?"#0a2e1a":isSelWrong?"#2e0a0a":isSel?"#0a1a2e":"#0a0a0a",color:isRight?"#22c55e":isSelWrong?"#ef4444":isSel?"#60a5fa":"#888",cursor:submitted?"default":"pointer",textAlign:"left",fontFamily:"inherit",fontSize:"0.82rem"}}>
                           <strong>{String.fromCharCode(65+j)})</strong> {opt}
                           {isRight&&submitted&&<span style={{float:"right",fontSize:"0.75rem"}}>✓ Richtig</span>}
                         </button>
@@ -532,12 +561,10 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                     {submitted&&showLoesung&&isCorrect&&q.explanation&&<div style={{marginTop:"0.6rem",padding:"0.6rem 0.9rem",background:"#0a1a0a",border:"1px solid #1a3a1a",borderRadius:"8px",fontSize:"0.78rem",color:"#4ade80"}}>💡 {q.explanation}</div>}
                   </div>
                 )}
-
-                {/* Freitext */}
                 {!ismc&&(
                   <div>
                     <textarea value={answers[i]||""} onChange={e=>!submitted&&setAnswers(a=>({...a,[i]:e.target.value}))} disabled={submitted} placeholder="Deine Antwort eingeben..." rows={4} style={{width:"100%",background:"#0a0a0a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.75rem 1rem",color:"#ccc",fontSize:"0.85rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box",opacity:submitted?0.8:1}}/>
-                    {submitted&&q.musterpunkte&&(showLoesung||true)&&(
+                    {submitted&&q.musterpunkte&&(
                       <div style={{marginTop:"0.6rem",padding:"0.75rem 1rem",background:"#0a1228",border:"1px solid #1a3a5a",borderRadius:"8px"}}>
                         <div style={{fontSize:"0.7rem",color:"#60a5fa",letterSpacing:"0.1em",marginBottom:"0.4rem",fontWeight:"bold"}}>MUSTERPUNKTE:</div>
                         {q.musterpunkte.map((p,j)=><div key={j} style={{fontSize:"0.8rem",color:"#93c5fd",display:"flex",gap:"0.4rem",marginBottom:"0.2rem"}}><span style={{color:"#3b82f6",flexShrink:0}}>•</span>{p}</div>)}
@@ -548,16 +575,19 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
               </div>
             );
           })}
-
-          {/* Abgeben */}
           {!submitted&&questions.length>0&&(
             <div style={{position:"sticky",bottom:0,background:"#070707",borderTop:"1px solid #111",padding:"1rem 0",marginTop:"0.5rem"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"1rem"}}>
-                <div style={{fontSize:"0.8rem",color:"#555"}}>
-                  {Object.keys(answers).length}/{questions.length} beantwortet
-                  {questions.filter((q,i)=>q.type==="mc"&&answers[i]===undefined).length>0&&` · ${questions.filter((q,i)=>q.type==="mc"&&answers[i]===undefined).length} MC offen`}
-                </div>
-                <button onClick={()=>setSubmitted(true)} disabled={!allAnswered} style={{padding:"0.85rem 2rem",borderRadius:"10px",background:allAnswered?"#22c55e":"#1a1a1a",border:"none",color:allAnswered?"#000":"#444",fontSize:"0.95rem",fontWeight:"bold",cursor:allAnswered?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                <div style={{fontSize:"0.8rem",color:"#555"}}>{Object.keys(answers).length}/{questions.length} beantwortet</div>
+                <button onClick={()=>{
+                  if(timerRef.current){clearInterval(timerRef.current);timerRef.current=null;}
+                  const mc=questions.filter(q=>q.type==="mc");
+                  const mcs=mc.filter((q)=>{const idx=questions.indexOf(q);return answers[idx]===q.correct;}).length;
+                  const h=JSON.parse(localStorage.getItem("fisi_pruef_history")||"[]");
+                  h.unshift({date:new Date().toISOString(),title:pruefungTitle,total:questions.length,mcTotal:mc.length,mcScore:mcs,percent:mc.length>0?Math.round((mcs/mc.length)*100):0,schwierigkeit});
+                  localStorage.setItem("fisi_pruef_history",JSON.stringify(h.slice(0,50)));
+                  setSubmitted(true);
+                }} disabled={!allAnswered} style={{padding:"0.85rem 2rem",borderRadius:"10px",background:allAnswered?"#22c55e":"#1a1a1a",border:"none",color:allAnswered?"#000":"#444",fontSize:"0.95rem",fontWeight:"bold",cursor:allAnswered?"pointer":"not-allowed",fontFamily:"inherit"}}>
                   {allAnswered?"Prüfung abgeben ✓":`Noch ${questions.length-Object.keys(answers).length} offen`}
                 </button>
               </div>
@@ -568,21 +598,14 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
     </div>
   );
 }
-
-// ── Setup Banner ──────────────────────────────────────────────────────────────
-
-// ════════════════════════════════════════════════════════════════════════════
-// ── ABFRAGE-MODUS ────────────────────────────────────────────────────────────
-// ════════════════════════════════════════════════════════════════════════════
+// ── Abfrage Config ────────────────────────────────────────────────────────────
 function AbfrageConfig({ items, onStart }) {
   const [selCats, setSelCats] = useState([]);
   const [anzahl, setAnzahl] = useState(10);
   const textItems = items.filter(i => i.type === "text" && i.content);
   const catCounts = CATEGORIES.reduce((a,c) => { a[c]=textItems.filter(i=>i.category===c).length; return a; }, {});
   const toggleCat = (cat) => setSelCats(p => p.includes(cat) ? p.filter(c=>c!==cat) : [...p,cat]);
-  const total = selCats.length === 0
-    ? textItems.length
-    : textItems.filter(i => selCats.includes(i.category)).length;
+  const total = selCats.length === 0 ? textItems.length : textItems.filter(i => selCats.includes(i.category)).length;
 
   return (
     <div style={{flex:1, overflowY:"auto", padding:"1.5rem 2rem", minWidth:0}}>
@@ -591,8 +614,6 @@ function AbfrageConfig({ items, onStart }) {
           <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.4rem",fontWeight:"bold",color:"#fff",marginBottom:"0.3rem"}}>Abfrage-Modus</div>
           <div style={{fontSize:"0.82rem",color:"#555"}}>Die KI stellt dir Fragen aus deinen Zusammenfassungen – du antwortest frei und bekommst sofort Feedback</div>
         </div>
-
-        {/* Kategorien */}
         <div style={{marginBottom:"1.75rem"}}>
           <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>KATEGORIEN WÄHLEN</div>
           <div style={{marginBottom:"0.75rem"}}>
@@ -612,8 +633,6 @@ function AbfrageConfig({ items, onStart }) {
             })}
           </div>
         </div>
-
-        {/* Anzahl */}
         <div style={{marginBottom:"2rem"}}>
           <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>ANZAHL FRAGEN</div>
           <div style={{display:"flex",gap:"0.5rem"}}>
@@ -622,8 +641,6 @@ function AbfrageConfig({ items, onStart }) {
             ))}
           </div>
         </div>
-
-        {/* Info Box */}
         <div style={{background:"#0a1a2e",border:"1px solid #1a3a5a",borderRadius:"10px",padding:"1rem 1.25rem",marginBottom:"1.5rem",display:"flex",gap:"1rem",alignItems:"flex-start"}}>
           <div style={{fontSize:"1.5rem",flexShrink:0}}>💡</div>
           <div>
@@ -635,12 +652,7 @@ function AbfrageConfig({ items, onStart }) {
             </div>
           </div>
         </div>
-
-        {/* Start Button */}
-        <button
-          onClick={()=>onStart(selCats,anzahl)}
-          disabled={total===0}
-          style={{width:"100%",padding:"1.1rem",borderRadius:"12px",background:total>0?"#3b82f6":"#1a1a1a",border:"none",color:total>0?"#fff":"#444",fontSize:"1rem",fontWeight:"bold",cursor:total>0?"pointer":"not-allowed",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.6rem",transition:"all 0.2s"}}>
+        <button onClick={()=>onStart(selCats,anzahl)} disabled={total===0} style={{width:"100%",padding:"1.1rem",borderRadius:"12px",background:total>0?"#3b82f6":"#1a1a1a",border:"none",color:total>0?"#fff":"#444",fontSize:"1rem",fontWeight:"bold",cursor:total>0?"pointer":"not-allowed",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.6rem"}}>
           🚀 Abfrage starten – {anzahl} Fragen aus {selCats.length===0?"allen":selCats.join(", ")} Themen
         </button>
       </div>
@@ -651,49 +663,45 @@ function AbfrageConfig({ items, onStart }) {
 function AbfrageSession({ items, selCats, anzahl, onBack }) {
   const [qIndex, setQIndex] = useState(0);
   const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState(null); // null | {correct, text, explanation}
+  const [feedback, setFeedback] = useState(null);
   const [hint, setHint] = useState(null);
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [loadingHint, setLoadingHint] = useState(false);
-  const [questions, setQuestions] = useState([]); // [{question, thema, content}]
+  const [questions, setQuestions] = useState([]);
   const [generating, setGenerating] = useState(true);
   const [score, setScore] = useState({ correct:0, wrong:0 });
   const [done, setDone] = useState(false);
+  const [wrongQuestions, setWrongQuestions] = useState([]);
   const textareaRef = useRef();
+
+  useEffect(() => {
+    if (done) {
+      const h = JSON.parse(localStorage.getItem("fisi_abfrage_history")||"[]");
+      h.unshift({date:new Date().toISOString(), correct:score.correct, wrong:score.wrong, total:score.correct+score.wrong, cats:selCats});
+      localStorage.setItem("fisi_abfrage_history", JSON.stringify(h.slice(0,50)));
+    }
+  }, [done]);
 
   const textItems = items.filter(i => i.type==="text" && i.content);
   const pool = selCats.length===0 ? textItems : textItems.filter(i=>selCats.includes(i.category));
 
-  // Generiere alle Fragen auf einmal beim Start
-  useEffect(() => {
-    generateQuestions();
-  }, []);
+  useEffect(() => { generateQuestions(); }, []);
 
   const generateQuestions = async () => {
     setGenerating(true);
-    // Wähle zufällige Items aus dem Pool
     const shuffled = [...pool].sort(()=>Math.random()-0.5);
     const selected = shuffled.slice(0, Math.min(anzahl, shuffled.length));
-
     const context = selected.map((item,i) =>
       `Frage ${i+1} zum Thema "${item.title}" (${item.category}):\nInhalt: ${(item.content||"").substring(0,600)}`
     ).join("\n\n---\n\n");
-
     const systemPrompt = `Du bist ein FISI IHK-Pruefungscoach. Erstelle Abfragefragen auf Deutsch. Antworte NUR mit einem JSON-Array, kein anderer Text.`;
-    const userMsg = `Erstelle genau ${selected.length} Abfragefragen (eine pro Thema). Fragen sollen pruefungsrelevant und klar sein.
-
-${context}
-
-Antworte NUR mit diesem JSON (kein Markdown):
-[{"question":"Die Frage?","thema":"Themenname","kategorie":"Kategorie","musterpunkte":["Erwarteter Punkt 1","Erwarteter Punkt 2","Erwarteter Punkt 3"]}]`;
-
+    const userMsg = `Erstelle genau ${selected.length} Abfragefragen (eine pro Thema). Fragen sollen pruefungsrelevant und klar sein.\n\n${context}\n\nAntworte NUR mit diesem JSON (kein Markdown):\n[{"question":"Die Frage?","thema":"Themenname","kategorie":"Kategorie","musterpunkte":["Erwarteter Punkt 1","Erwarteter Punkt 2","Erwarteter Punkt 3"]}]`;
     try {
       const reply = await callKI([{role:"user",content:userMsg}], systemPrompt);
       const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed = JSON.parse(clean);
       setQuestions(parsed);
     } catch(e) {
-      // Fallback: einfache Fragen ohne KI
       const fallback = selected.map(item => ({
         question: `Erkläre das Konzept: ${item.title}`,
         thema: item.title,
@@ -710,26 +718,16 @@ Antworte NUR mit diesem JSON (kein Markdown):
 
   const checkAnswer = async () => {
     if (!answer.trim() || loadingFeedback) return;
-    setLoadingFeedback(true);
-    setHint(null);
-
+    setLoadingFeedback(true); setHint(null);
     const systemPrompt = `Du bist ein FISI IHK-Pruefungscoach. Bewerte Antworten auf Deutsch. Antworte NUR mit JSON.`;
-    const userMsg = `Frage: ${currentQ.question}
-Erwartete Punkte: ${currentQ.musterpunkte.join(", ")}
-Antwort des Schuelers: ${answer}
-
-Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
-{"correct":true,"bewertung":"Richtig/Teilweise/Falsch","feedback":"Kurzes Feedback (2-3 Saetze)","was_gut":"Was war gut an der Antwort","verbesserung":"Was haette besser sein koennen oder fehlt"}`;
-
+    const userMsg = `Frage: ${currentQ.question}\nErwartete Punkte: ${currentQ.musterpunkte.join(", ")}\nAntwort des Schuelers: ${answer}\n\nBewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):\n{"correct":true,"bewertung":"Richtig/Teilweise/Falsch","feedback":"Kurzes Feedback (2-3 Saetze)","was_gut":"Was war gut an der Antwort","verbesserung":"Was haette besser sein koennen oder fehlt"}`;
     try {
       const reply = await callKI([{role:"user",content:userMsg}], systemPrompt);
       const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed = JSON.parse(clean);
       setFeedback(parsed);
-      setScore(s => ({
-        correct: s.correct + (parsed.correct?1:0),
-        wrong: s.wrong + (!parsed.correct?1:0)
-      }));
+      setScore(s => ({ correct: s.correct + (parsed.correct?1:0), wrong: s.wrong + (!parsed.correct?1:0) }));
+      if (!parsed.correct) setWrongQuestions(prev => [...prev, currentQ]);
     } catch(e) {
       setFeedback({correct:false, bewertung:"Fehler", feedback:"KI-Verbindung fehlgeschlagen: "+e.message, was_gut:"", verbesserung:""});
     }
@@ -743,22 +741,16 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
     try {
       const reply = await callKI([{role:"user",content:`Gib einen kurzen Hinweis (2-3 Saetze) zur Frage: "${currentQ.question}". Erwartete Punkte: ${currentQ.musterpunkte.join(", ")}. Verrate nicht die volle Antwort, sondern gib nur einen Denkanstoß!`}], systemPrompt);
       setHint(reply);
-    } catch(e) {
-      setHint("Hinweis: " + currentQ.musterpunkte[0]);
-    }
+    } catch(e) { setHint("Hinweis: " + currentQ.musterpunkte[0]); }
     setLoadingHint(false);
   };
 
   const nextQuestion = () => {
     if (qIndex >= questions.length-1) { setDone(true); return; }
-    setQIndex(i=>i+1);
-    setAnswer("");
-    setFeedback(null);
-    setHint(null);
+    setQIndex(i=>i+1); setAnswer(""); setFeedback(null); setHint(null);
     setTimeout(()=>textareaRef.current?.focus(),100);
   };
 
-  // Lade-Screen
   if (generating) return (
     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
       <div style={{fontSize:"3rem",marginBottom:"1.5rem"}}>🧠</div>
@@ -768,7 +760,6 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
     </div>
   );
 
-  // Abgeschlossen
   if (done) {
     const total = score.correct + score.wrong;
     const pct = total>0 ? Math.round((score.correct/total)*100) : 0;
@@ -781,8 +772,19 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
             <div style={{fontSize:"3rem",fontWeight:"bold",color:pct>=80?"#22c55e":pct>=50?"#eab308":"#888"}}>{score.correct}/{total}</div>
             <div style={{fontSize:"1.1rem",color:pct>=80?"#22c55e":pct>=50?"#eab308":"#888",marginTop:"0.3rem"}}>{pct}% richtig beantwortet</div>
           </div>
+          {wrongQuestions.length>0&&(
+            <div style={{background:"#1a0a0a",border:"1px solid #ef444440",borderRadius:"12px",padding:"1rem 1.25rem",marginBottom:"1.25rem",textAlign:"center"}}>
+              <div style={{fontSize:"0.82rem",color:"#ef4444",marginBottom:"0.75rem",fontWeight:"bold"}}>❌ {wrongQuestions.length} Frage{wrongQuestions.length!==1?"n":""} falsch beantwortet</div>
+              <button onClick={()=>{
+                setQuestions(wrongQuestions); setWrongQuestions([]); setQIndex(0); setAnswer("");
+                setFeedback(null); setHint(null); setScore({correct:0,wrong:0}); setDone(false);
+              }} style={{padding:"0.65rem 1.25rem",borderRadius:"10px",background:"#ef4444",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.4rem",margin:"0 auto"}}>
+                <Icon name="repeat" size={14}/>Falsche Fragen wiederholen
+              </button>
+            </div>
+          )}
           <div style={{display:"flex",gap:"0.75rem",justifyContent:"center",flexWrap:"wrap"}}>
-            <button onClick={()=>{setQIndex(0);setAnswer("");setFeedback(null);setHint(null);setScore({correct:0,wrong:0});setDone(false);setGenerating(true);generateQuestions();}} style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold"}}>🔄 Neue Abfrage</button>
+            <button onClick={()=>{setQIndex(0);setAnswer("");setFeedback(null);setHint(null);setScore({correct:0,wrong:0});setWrongQuestions([]);setDone(false);setGenerating(true);generateQuestions();}} style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold"}}>🔄 Neue Abfrage</button>
             <button onClick={onBack} style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#0f0f0f",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit"}}>← Zurück</button>
           </div>
         </div>
@@ -794,10 +796,7 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
 
   return (
     <div style={{flex:1,overflowY:"auto",padding:"1.5rem 2rem",minWidth:0}}>
-      {/* Popup-Karte */}
       <div style={{maxWidth:"760px",margin:"0 auto"}}>
-
-        {/* Fortschritt */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.25rem"}}>
           <button onClick={onBack} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.4rem 0.8rem",cursor:"pointer",color:"#555",fontFamily:"inherit",fontSize:"0.78rem",display:"flex",alignItems:"center",gap:"0.4rem"}}>← Beenden</button>
           <div style={{display:"flex",alignItems:"center",gap:"1rem"}}>
@@ -809,33 +808,21 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
           </div>
           <div style={{fontSize:"0.78rem",color:"#555"}}>{qIndex+1}/{questions.length}</div>
         </div>
-
-        {/* Frage-Card */}
         <div style={{background:`linear-gradient(135deg,${col.bg}cc,#080808)`,border:`1px solid ${col.badge}40`,borderRadius:"16px",overflow:"hidden",boxShadow:`0 0 40px ${col.badge}10`}}>
-
-          {/* Card Header */}
           <div style={{padding:"1.25rem 1.5rem",borderBottom:`1px solid ${col.badge}20`}}>
             <div style={{display:"flex",gap:"0.5rem",marginBottom:"0.6rem"}}>
               <span style={{fontSize:"0.62rem",letterSpacing:"0.15em",color:col.badge,background:`${col.badge}15`,padding:"0.2rem 0.5rem",borderRadius:"4px",border:`1px solid ${col.badge}30`,fontWeight:"bold"}}>{currentQ.kategorie?.toUpperCase()}</span>
               <span style={{fontSize:"0.62rem",color:"#555",background:"#0a0a0a",padding:"0.2rem 0.5rem",borderRadius:"4px",border:"1px solid #1a1a1a"}}>{currentQ.thema}</span>
             </div>
-            <div style={{fontSize:"1.05rem",fontWeight:"bold",color:"#eee",lineHeight:1.5}}>
-              ❓ {currentQ.question}
-            </div>
+            <div style={{fontSize:"1.05rem",fontWeight:"bold",color:"#eee",lineHeight:1.5}}>❓ {currentQ.question}</div>
           </div>
-
-          {/* Antwort-Bereich */}
           <div style={{padding:"1.25rem 1.5rem"}}>
-
-            {/* Hinweis */}
             {hint && (
               <div style={{background:"#0a1a2e",border:"1px solid #1a3a5a",borderRadius:"10px",padding:"0.9rem 1.1rem",marginBottom:"1rem",display:"flex",gap:"0.75rem"}}>
                 <div style={{flexShrink:0,fontSize:"1.2rem"}}>💡</div>
                 <div style={{fontSize:"0.82rem",color:"#93c5fd",lineHeight:"1.65"}}>{hint}</div>
               </div>
             )}
-
-            {/* Feedback */}
             {feedback && (
               <div style={{borderRadius:"12px",padding:"1rem 1.25rem",marginBottom:"1rem",background:feedback.correct?"#0a2e1a":"#1a0a0a",border:`1px solid ${feedback.correct?"#22c55e":"#ef4444"}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.6rem"}}>
@@ -847,50 +834,26 @@ Bewerte die Antwort. Antworte NUR mit diesem JSON (kein Markdown):
                 {feedback.verbesserung&&<div style={{fontSize:"0.78rem",color:"#fca5a5"}}>📝 {feedback.verbesserung}</div>}
               </div>
             )}
-
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={answer}
-              onChange={e=>setAnswer(e.target.value)}
-              disabled={!!feedback}
-              onKeyDown={e=>{ if(e.key==="Enter"&&e.ctrlKey&&!feedback) checkAnswer(); }}
-              placeholder="Deine Antwort hier eingeben... (Strg+Enter zum Prüfen)"
-              rows={5}
-              style={{width:"100%",background:"#0a0a0a",border:`1px solid ${feedback?(feedback.correct?"#22c55e":"#ef4444"):"#2a2a2a"}`,borderRadius:"10px",padding:"0.9rem 1.1rem",color:"#ccc",fontSize:"0.88rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box",opacity:feedback?0.7:1,transition:"border-color 0.2s"}}
-            />
-
-            {/* Buttons */}
+            <textarea ref={textareaRef} value={answer} onChange={e=>setAnswer(e.target.value)} disabled={!!feedback} onKeyDown={e=>{ if(e.key==="Enter"&&e.ctrlKey&&!feedback) checkAnswer(); }} placeholder="Deine Antwort hier eingeben... (Strg+Enter zum Prüfen)" rows={5} style={{width:"100%",background:"#0a0a0a",border:`1px solid ${feedback?(feedback.correct?"#22c55e":"#ef4444"):"#2a2a2a"}`,borderRadius:"10px",padding:"0.9rem 1.1rem",color:"#ccc",fontSize:"0.88rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box",opacity:feedback?0.7:1}}/>
             <div style={{display:"flex",gap:"0.75rem",marginTop:"0.85rem",flexWrap:"wrap"}}>
               {!feedback ? (
                 <>
-                  <button
-                    onClick={getHint}
-                    disabled={loadingHint||!!hint}
-                    style={{padding:"0.7rem 1.2rem",borderRadius:"10px",background:hint?"#1a1a1a":"#0a1a2e",border:`1px solid ${hint?"#2a2a2a":"#1a3a5a"}`,color:hint?"#444":"#60a5fa",cursor:hint||loadingHint?"not-allowed":"pointer",fontFamily:"inherit",fontSize:"0.85rem",display:"flex",alignItems:"center",gap:"0.4rem",transition:"all 0.2s"}}>
-                    {loadingHint?<><span style={{animation:"pulse 1s infinite"}}>...</span> Hinweis lädt</>:<>💡 {hint?"Hinweis angezeigt":"Hinweis"}</>}
+                  <button onClick={getHint} disabled={loadingHint||!!hint} style={{padding:"0.7rem 1.2rem",borderRadius:"10px",background:hint?"#1a1a1a":"#0a1a2e",border:`1px solid ${hint?"#2a2a2a":"#1a3a5a"}`,color:hint?"#444":"#60a5fa",cursor:hint||loadingHint?"not-allowed":"pointer",fontFamily:"inherit",fontSize:"0.85rem",display:"flex",alignItems:"center",gap:"0.4rem"}}>
+                    {loadingHint?"... Hinweis lädt":<>💡 {hint?"Hinweis angezeigt":"Hinweis"}</>}
                   </button>
-                  <button
-                    onClick={checkAnswer}
-                    disabled={!answer.trim()||loadingFeedback}
-                    style={{flex:1,padding:"0.7rem 1.2rem",borderRadius:"10px",background:answer.trim()&&!loadingFeedback?"#3b82f6":"#1a1a1a",border:"none",color:answer.trim()&&!loadingFeedback?"#fff":"#444",cursor:answer.trim()&&!loadingFeedback?"pointer":"not-allowed",fontFamily:"inherit",fontSize:"0.88rem",fontWeight:"bold",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem",transition:"all 0.2s"}}>
-                    {loadingFeedback?<><div style={{display:"flex",gap:"3px"}}>{[0,1,2].map(n=><div key={n} style={{width:"5px",height:"5px",borderRadius:"50%",background:"#fff",animation:`bounce 1s infinite ${n*0.15}s`}}/>)}</div> KI bewertet...</>:"✓ Antwort prüfen"}
+                  <button onClick={checkAnswer} disabled={!answer.trim()||loadingFeedback} style={{flex:1,padding:"0.7rem 1.2rem",borderRadius:"10px",background:answer.trim()&&!loadingFeedback?"#3b82f6":"#1a1a1a",border:"none",color:answer.trim()&&!loadingFeedback?"#fff":"#444",cursor:answer.trim()&&!loadingFeedback?"pointer":"not-allowed",fontFamily:"inherit",fontSize:"0.88rem",fontWeight:"bold",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem"}}>
+                    {loadingFeedback?"KI bewertet...":"✓ Antwort prüfen"}
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={nextQuestion}
-                  style={{flex:1,padding:"0.8rem 1.2rem",borderRadius:"10px",background:qIndex>=questions.length-1?"#22c55e":"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:"0.9rem",fontWeight:"bold",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
+                <button onClick={nextQuestion} style={{flex:1,padding:"0.8rem 1.2rem",borderRadius:"10px",background:qIndex>=questions.length-1?"#22c55e":"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:"0.9rem",fontWeight:"bold",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
                   {qIndex>=questions.length-1?"🏁 Abfrage abschließen":"Nächste Frage →"}
                 </button>
               )}
             </div>
-
             {!feedback&&<div style={{fontSize:"0.65rem",color:"#333",marginTop:"0.4rem",textAlign:"right"}}>Strg+Enter zum Prüfen</div>}
           </div>
         </div>
-
-        {/* Erwartete Punkte (nach Bewertung anzeigen) */}
         {feedback&&currentQ.musterpunkte&&(
           <div style={{background:"#0a0a0a",border:"1px solid #1a1a1a",borderRadius:"12px",padding:"1rem 1.25rem",marginTop:"1rem"}}>
             <div style={{fontSize:"0.65rem",letterSpacing:"0.15em",color:"#555",marginBottom:"0.6rem",fontWeight:"bold"}}>ERWARTETE PUNKTE</div>
@@ -932,7 +895,6 @@ function SetupBanner() {
     </div>
   );
 }
-
 // ── Upload Modal ──────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onRefresh }) {
   const [tab,setTab]=useState("text");
@@ -945,18 +907,24 @@ function UploadModal({ onClose, onRefresh }) {
   const [uploading,setUploading]=useState(false);
   const [done,setDone]=useState(false);
   const [error,setError]=useState("");
+  const [kiRaw,setKiRaw]=useState("");
+  const [kiGenerating,setKiGenerating]=useState(false);
+  const [kiGenerated,setKiGenerated]=useState(false);
   const fileRef=useRef();
   const inp={width:"100%",background:"#0f0f0f",border:"1px solid #222",borderRadius:"8px",padding:"0.7rem 1rem",color:"#ddd",fontSize:"0.88rem",outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
   const lbl={fontSize:"0.62rem",letterSpacing:"0.18em",color:"#555",display:"block",marginBottom:"0.4rem",fontWeight:"600"};
   const handleSave=async()=>{
     if(!title.trim())return setError("Bitte Titel eingeben!");
     if(tab==="text"&&!content.trim())return setError("Bitte Inhalt eingeben!");
+    if(tab==="ki"&&!content.trim())return setError("Bitte erst eine KI-Zusammenfassung generieren!");
     if(tab==="file"&&!file)return setError("Bitte Datei auswaehlen!");
     setError("");setUploading(true);
     try{
       let fp=null,fn=null,fs=null,ft=null;
       if(tab==="file"&&file){const path=`${Date.now()}_${file.name.replace(/\s+/g,"_")}`;const{error:e}=await supabase.storage.from(BUCKET).upload(path,file);if(e)throw e;fp=path;fn=file.name;fs=file.size;ft=file.name.split(".").pop().toLowerCase();}
-      const{error:e}=await supabase.from(TABLE).insert({title:title.trim(),category,content:tab==="text"?content.trim():null,tags:tags.split(",").map(t=>t.trim()).filter(Boolean),author:author.trim()||"Anonym",file_path:fp,file_name:fn,file_size:fs,file_type:ft,type:tab,starred:false,youtube_links:[]});
+      const saveType=tab==="ki"?"text":tab;
+      const saveContent=(tab==="text"||tab==="ki")?content.trim():null;
+      const{error:e}=await supabase.from(TABLE).insert({title:title.trim(),category,content:saveContent,tags:tags.split(",").map(t=>t.trim()).filter(Boolean),author:author.trim()||"Anonym",file_path:fp,file_name:fn,file_size:fs,file_type:ft,type:saveType,starred:false,youtube_links:[]});
       if(e)throw e;
       setDone(true);setTimeout(()=>{onRefresh();onClose();},1000);
     }catch(e){setError("Fehler: "+e.message);}
@@ -971,7 +939,7 @@ function UploadModal({ onClose, onRefresh }) {
         </div>
         <div style={{padding:"1.5rem 1.75rem",display:"flex",flexDirection:"column",gap:"1.1rem"}}>
           <div style={{display:"flex",background:"#0f0f0f",borderRadius:"10px",padding:"4px",border:"1px solid #1a1a1a"}}>
-            {[["text","📝 Text"],["file","📎 Datei"]].map(([id,label])=>(
+            {[["text","📝 Text"],["file","📎 Datei"],["ki","🤖 KI"]].map(([id,label])=>(
               <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"0.5rem",borderRadius:"7px",border:"none",background:tab===id?"#fff":"transparent",color:tab===id?"#000":"#666",fontSize:"0.83rem",fontWeight:tab===id?"bold":"normal",cursor:"pointer",fontFamily:"inherit"}}>{label}</button>
             ))}
           </div>
@@ -984,7 +952,31 @@ function UploadModal({ onClose, onRefresh }) {
               {CATEGORIES.map(cat=>{const a=category===cat;const c=CAT_COLORS[cat];return(<button key={cat} onClick={()=>setCategory(cat)} style={{padding:"0.35rem 0.8rem",borderRadius:"20px",fontSize:"0.78rem",border:a?`1px solid ${c.badge}`:"1px solid #1e1e1e",background:a?`${c.badge}18`:"transparent",color:a?c.badge:"#555",cursor:"pointer",fontFamily:"inherit"}}>{cat}</button>);})}
             </div>
           </div>
-          {tab==="text"&&<div><label style={lbl}>INHALT *</label><textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Zusammenfassung..." rows={10} style={{...inp,fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",color:"#bbb"}}/></div>}
+          {tab==="text"&&<div><label style={lbl}>INHALT *</label><textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Zusammenfassung... (Markdown wird unterstützt: # Titel, ## Abschnitt, - Liste, **fett**, `code`)" rows={10} style={{...inp,fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",color:"#bbb"}}/></div>}
+          {tab==="ki"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+              <div><label style={lbl}>ROHER TEXT (aus PDF, Mitschrift, etc.)</label>
+                <textarea value={kiRaw} onChange={e=>setKiRaw(e.target.value)} placeholder="Text hier einfügen – z.B. aus einer PDF kopiert, eigene Mitschriften oder Stichpunkte..." rows={6} style={{...inp,fontFamily:"'Courier New',monospace",lineHeight:"1.6",resize:"vertical",color:"#bbb"}}/>
+              </div>
+              <button onClick={async()=>{
+                if(!kiRaw.trim())return;
+                setKiGenerating(true);
+                try{
+                  const reply=await callKI([{role:"user",content:`Erstelle aus folgendem Text eine strukturierte Lernzusammenfassung für die FISI IHK-Prüfung (IHK Heilbronn, Mai 2026).\n\nVerwende Markdown-Formatierung:\n- # für Hauptthema\n- ## für Unterthemen\n- - für Aufzählungen\n- **fett** für wichtige Begriffe\n- \`code\` für technische Begriffe/Befehle/Protokolle\n- Füge am Ende einen kurzen "Merksatz" als > Zitat-Block hinzu\n\nText:\n${kiRaw.substring(0,3000)}`}],`Du bist ein FISI-Lernassistent der IHK Heilbronn. Erstelle strukturierte, prüfungsrelevante Markdown-Zusammenfassungen auf Deutsch. Sei präzise und lernfreundlich.`);
+                  setContent(reply);setKiGenerated(true);
+                }catch(e){setError("KI-Fehler: "+e.message);}
+                setKiGenerating(false);
+              }} disabled={!kiRaw.trim()||kiGenerating} style={{padding:"0.75rem",borderRadius:"9px",background:kiRaw.trim()&&!kiGenerating?"#a855f7":"#1a1a1a",border:"none",color:kiRaw.trim()&&!kiGenerating?"#fff":"#444",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.85rem",cursor:kiRaw.trim()&&!kiGenerating?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem"}}>
+                {kiGenerating?<>KI erstellt Zusammenfassung...</>:<><Icon name="zap" size={14}/>KI-Zusammenfassung generieren</>}
+              </button>
+              {kiGenerated&&(
+                <div>
+                  <label style={{...lbl,color:"#a855f7"}}>✓ GENERIERT – bearbeitbar</label>
+                  <textarea value={content} onChange={e=>setContent(e.target.value)} rows={12} style={{...inp,fontFamily:"'Courier New',monospace",lineHeight:"1.6",resize:"vertical",color:"#bbb",borderColor:"#a855f730"}}/>
+                </div>
+              )}
+            </div>
+          )}
           {tab==="file"&&(
             <div><label style={lbl}>DATEI *</label>
               <div onClick={()=>fileRef.current.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)setFile(f);}}
@@ -1020,83 +1012,48 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
   const handleViewFile=async()=>{const{data}=await supabase.storage.from(BUCKET).getPublicUrl(item.file_path);window.open(data.publicUrl,"_blank");};
   const videos=item.youtube_links||[];
 
-  // Text aufbereiten fuer natuerlicheres Vorlesen
   const prepareText=(raw)=>{
     let t=raw||"";
-    t=t.replace(/\n\n+/g,". ");
-    t=t.replace(/\n/g,", ");
-    t=t.replace(/\s*\|\s*/g,". ");
+    t=t.replace(/\n\n+/g,". ");t=t.replace(/\n/g,", ");t=t.replace(/\s*\|\s*/g,". ");
     t=t.replace(/\s*\(\s*/g,", ").replace(/\s*\)\s*/g,", ");
-    t=t.replace(/[.]{2,}/g,". ");
-    t=t.replace(/\s{2,}/g," ");
+    t=t.replace(/[.]{2,}/g,". ");t=t.replace(/\s{2,}/g," ");
     return t.trim();
   };
-
   const splitSentences=(text)=>{
-    const parts=[];
-    let buf="";
+    const parts=[];let buf="";
     for(let i=0;i<text.length;i++){
-      buf+=text[i];
-      const c=text[i];
-      const next=text[i+1]||"";
-      if((c==="."||c==="!"||c==="?")&&(next===" "||next==="\n"||next==="")){
-        const s=buf.trim();
-        if(s.length>3) parts.push(s);
-        buf="";
-      }
+      buf+=text[i];const c=text[i];const next=text[i+1]||"";
+      if((c==="."||c==="!"||c==="?")&&(next===" "||next==="\n"||next==="")){const s=buf.trim();if(s.length>3)parts.push(s);buf="";}
     }
-    if(buf.trim().length>3) parts.push(buf.trim());
+    if(buf.trim().length>3)parts.push(buf.trim());
     return parts.length>0?parts:[text];
   };
-
   const speakChunks=(chunks,voice,idx=0)=>{
     if(idx>=chunks.length){setSpeaking(false);return;}
     const utt=new SpeechSynthesisUtterance(chunks[idx]);
-    utt.lang="de-DE";
-    utt.rate=0.88;
-    utt.pitch=1.0;
-    utt.volume=1.0;
-    if(voice) utt.voice=voice;
+    utt.lang="de-DE";utt.rate=0.88;utt.pitch=1.0;utt.volume=1.0;
+    if(voice)utt.voice=voice;
     utt.onend=()=>setTimeout(()=>speakChunks(chunks,voice,idx+1),110);
-    utt.onerror=(e)=>{
-      if(e.error!=="interrupted") speakChunks(chunks,voice,idx+1);
-      else setSpeaking(false);
-    };
+    utt.onerror=(e)=>{if(e.error!=="interrupted")speakChunks(chunks,voice,idx+1);else setSpeaking(false);};
     window.speechSynthesis.speak(utt);
   };
-
   const handleSpeak=()=>{
     if(!window.speechSynthesis){alert("Dein Browser unterstuetzt kein Text-to-Speech!");return;}
     if(speaking){window.speechSynthesis.cancel();setSpeaking(false);return;}
     const rawText=item.title+". Kategorie: "+item.category+". "+(item.content||"").substring(0,4000);
-    const prepared=prepareText(rawText);
-    const chunks=splitSentences(prepared);
-    const getBestVoice=()=>{
-      const vv=window.speechSynthesis.getVoices();
-      return vv.find(v=>v.lang==="de-DE"&&v.name.includes("Katja"))
-        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Conrad"))
-        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))
-        ||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))
-        ||vv.find(v=>v.lang==="de-DE")
-        ||vv.find(v=>v.lang.startsWith("de"));
-    };
+    const prepared=prepareText(rawText);const chunks=splitSentences(prepared);
+    const getBestVoice=()=>{const vv=window.speechSynthesis.getVoices();return vv.find(v=>v.lang==="de-DE"&&v.name.includes("Katja"))||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Conrad"))||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Microsoft"))||vv.find(v=>v.lang==="de-DE"&&v.name.includes("Google"))||vv.find(v=>v.lang==="de-DE")||vv.find(v=>v.lang.startsWith("de"));};
     const start=()=>{window.speechSynthesis.cancel();setSpeaking(true);speakChunks(chunks,getBestVoice(),0);};
-    if(window.speechSynthesis.getVoices().length>0) start();
+    if(window.speechSynthesis.getVoices().length>0)start();
     else{window.speechSynthesis.onvoiceschanged=()=>{window.speechSynthesis.onvoiceschanged=null;start();};}
   };
-
-  useEffect(()=>{
-    return ()=>{
-      try{ if(window.speechSynthesis&&speaking) window.speechSynthesis.cancel(); }catch(e){}
-    };
-  },[speaking]);
+  useEffect(()=>{ return ()=>{ try{if(window.speechSynthesis&&speaking)window.speechSynthesis.cancel();}catch(e){} }; },[speaking]);
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.93)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
       <div style={{background:"#080808",border:`1px solid ${col.badge}30`,borderRadius:"16px",width:"100%",maxWidth:"820px",maxHeight:"93vh",overflow:"auto",position:"relative"}}>
         <div style={{padding:"1.25rem 1.75rem",borderBottom:`1px solid ${col.badge}18`,background:`linear-gradient(135deg,${col.bg}bb,#080808)`,position:"sticky",top:0,zIndex:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"0.75rem"}}>
-            {/* Links: Titel + Meta */}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",gap:"0.4rem",marginBottom:"0.4rem",flexWrap:"wrap"}}>
                 <span style={{fontSize:"0.58rem",letterSpacing:"0.18em",color:col.badge,background:`${col.badge}12`,padding:"0.18rem 0.5rem",borderRadius:"4px",border:`1px solid ${col.badge}25`,fontWeight:"bold"}}>{item.category.toUpperCase()}</span>
@@ -1107,10 +1064,8 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
               <div style={{fontSize:"1.1rem",fontWeight:"bold",color:"#eee",fontFamily:"'Courier New',monospace",lineHeight:1.3,wordBreak:"break-word"}}>{item.title}</div>
               <div style={{fontSize:"0.7rem",color:"#444",marginTop:"0.25rem"}}>von {item.author}</div>
             </div>
-            {/* Rechts: X Button groß und alleine */}
             <button onClick={onClose} style={{flexShrink:0,width:"40px",height:"40px",background:"#1e1e1e",border:"1px solid #333",borderRadius:"10px",cursor:"pointer",color:"#aaa",display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>{e.currentTarget.style.background="#333";e.currentTarget.style.color="#fff";}} onMouseLeave={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.color="#aaa";}}><Icon name="close" size={18}/></button>
           </div>
-          {/* Aktions-Buttons in eigener Zeile */}
           <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginTop:"0.75rem"}}>
             <button onClick={()=>markVerstanden(item.id,!fortschritt[item.id]?.verstanden)} style={{background:fortschritt[item.id]?.verstanden?"#0a2e1a":"none",border:`1px solid ${fortschritt[item.id]?.verstanden?"#22c55e":"#2a2a2a"}`,borderRadius:"7px",padding:"0.4rem 0.7rem",cursor:"pointer",color:fortschritt[item.id]?.verstanden?"#22c55e":"#666",fontSize:"0.75rem",fontFamily:"inherit",fontWeight:"bold"}}>{fortschritt[item.id]?.verstanden?"✓ Verstanden":"○ Verstanden?"}</button>
             <button onClick={()=>setNotizOpen(o=>!o)} style={{background:notizText?"#1a1a0a":"none",border:`1px solid ${notizText?"#eab308":"#2a2a2a"}`,borderRadius:"7px",padding:"0.4rem 0.65rem",cursor:"pointer",color:notizText?"#eab308":"#666",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"0.3rem",fontFamily:"inherit"}}><Icon name="note" size={13}/>Notiz</button>
@@ -1127,14 +1082,12 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
           {item.tags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"0.35rem",marginTop:"0.65rem"}}>{item.tags.map(t=><span key={t} style={{fontSize:"0.65rem",color:"#666",background:"#0f0f0f",padding:"0.12rem 0.4rem",borderRadius:"4px",border:"1px solid #1a1a1a"}}>#{t}</span>)}</div>}
         </div>
         <div style={{padding:"1.75rem"}}>
-          {/* Notiz Box */}
           {notizOpen&&<div style={{marginBottom:"1.25rem",background:"#0f0f0f",border:"1px solid #eab30830",borderRadius:"12px",padding:"1rem"}}>
             <div style={{fontSize:"0.7rem",color:"#eab308",letterSpacing:"0.15em",marginBottom:"0.5rem",fontWeight:"bold"}}>📝 MEINE NOTIZ</div>
             <textarea value={notizText} onChange={e=>setNotizText(e.target.value)} placeholder="Eigene Notizen, Merksätze..." rows={4} style={{width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.75rem",color:"#ddd",fontSize:"0.85rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box"}}/>
             <button onClick={()=>{saveNotiz(item.id,notizText);setNotizOpen(false);}} style={{marginTop:"0.5rem",padding:"0.5rem 1rem",borderRadius:"8px",background:"#eab308",border:"none",color:"#000",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.82rem",cursor:"pointer"}}>Speichern</button>
           </div>}
-
-          {item.type==="text"&&<div style={{fontFamily:"'Courier New',monospace",fontSize:"0.87rem",color:"#b0b0b0",lineHeight:"1.9",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{item.content}</div>}
+          {item.type==="text"&&<div style={{wordBreak:"break-word"}}>{renderMarkdown(item.content)}</div>}
           {item.type==="file"&&<div style={{textAlign:"center",padding:"2rem"}}>
             <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{fi?.icon||"📎"}</div>
             <div style={{fontSize:"1rem",color:"#aaa",fontWeight:"bold",marginBottom:"0.5rem"}}>{item.file_name}</div>
@@ -1148,30 +1101,13 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
             <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
               {videos.map((v,i)=>(
                 <div key={i} style={{borderRadius:"12px",overflow:"hidden",border:"1px solid #1e1e1e",background:"#0f0f0f"}}>
-                  {/* Video Thumbnail */}
                   {activeVideo===i&&!isMobile ? (
                     <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
-                      <iframe
-                        src={"https://www.youtube.com/embed/"+v.id+"?autoplay=1&rel=0"}
-                        style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        title={v.title}
-                      />
+                      <iframe src={"https://www.youtube.com/embed/"+v.id+"?autoplay=1&rel=0"} style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title={v.title}/>
                     </div>
                   ) : (
-                    <a
-                      href={"https://www.youtube.com/watch?v="+v.id}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={isMobile?undefined:(e)=>{e.preventDefault();setActiveVideo(i);}}
-                      style={{display:"block",position:"relative",paddingBottom:"56.25%",background:"#1a1a1a",overflow:"hidden",textDecoration:"none"}}
-                    >
-                      <img
-                        src={"https://img.youtube.com/vi/"+v.id+"/hqdefault.jpg"}
-                        alt={v.title}
-                        style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
-                      />
+                    <a href={"https://www.youtube.com/watch?v="+v.id} target="_blank" rel="noreferrer" onClick={isMobile?undefined:(e)=>{e.preventDefault();setActiveVideo(i);}} style={{display:"block",position:"relative",paddingBottom:"56.25%",background:"#1a1a1a",overflow:"hidden",textDecoration:"none"}}>
+                      <img src={"https://img.youtube.com/vi/"+v.id+"/hqdefault.jpg"} alt={v.title} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}/>
                       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.6rem"}}>
                         <div style={{width:"68px",height:"68px",background:"rgba(220,0,0,0.92)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.5)"}}>
                           <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
@@ -1214,42 +1150,126 @@ function SideSection({ title, children, defaultOpen=true }) {
   );
 }
 
+// ── Statistik Page ────────────────────────────────────────────────────────────
+function StatistikPage({ items, fortschrittData }) {
+  const pruefHistory = JSON.parse(localStorage.getItem("fisi_pruef_history")||"[]");
+  const abfrageHistory = JSON.parse(localStorage.getItem("fisi_abfrage_history")||"[]");
+  const textItems = items.filter(i => i.type==="text");
+  const catStats = CATEGORIES.map(cat => {
+    const catItems = textItems.filter(i => i.category===cat);
+    const verstanden = catItems.filter(i => fortschrittData[i.id]?.verstanden).length;
+    return { cat, total:catItems.length, verstanden };
+  }).filter(s => s.total > 0);
+  const totalVerstanden = textItems.filter(i => fortschrittData[i.id]?.verstanden).length;
+  const totalPct = textItems.length > 0 ? Math.round((totalVerstanden/textItems.length)*100) : 0;
+  const avgPruef = pruefHistory.length > 0 ? Math.round(pruefHistory.reduce((a,h)=>a+h.percent,0)/pruefHistory.length) : null;
+  const avgAbfrage = abfrageHistory.length > 0 ? Math.round(abfrageHistory.reduce((a,h)=>a+(h.total>0?Math.round(h.correct/h.total*100):0),0)/abfrageHistory.length) : null;
 
+  return (
+    <div style={{flex:1,overflowY:"auto",padding:"1.5rem 2rem",minWidth:0}}>
+      <div style={{maxWidth:"900px"}}>
+        <div style={{marginBottom:"2rem"}}>
+          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.4rem",fontWeight:"bold",color:"#fff",marginBottom:"0.3rem"}}>Statistik & Fortschritt</div>
+          <div style={{fontSize:"0.82rem",color:"#555"}}>Dein Lernfortschritt auf einen Blick – Prüfung Mai 2026</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"0.75rem",marginBottom:"2rem"}}>
+          {[
+            {label:"Themen verstanden",value:`${totalVerstanden}/${textItems.length}`,sub:`${totalPct}%`,color:"#22c55e"},
+            {label:"Ø Prüfungs-Score",value:avgPruef!==null?`${avgPruef}%`:"–",sub:`${pruefHistory.length} Prüfungen`,color:"#eab308"},
+            {label:"Ø Abfrage-Score",value:avgAbfrage!==null?`${avgAbfrage}%`:"–",sub:`${abfrageHistory.length} Sessions`,color:"#a855f7"},
+            {label:"Favoriten",value:items.filter(i=>i.starred).length,sub:"gespeichert",color:"#f5c518"},
+          ].map(k=>(
+            <div key={k.label} style={{background:"#0f0f0f",border:`1px solid ${k.color}20`,borderRadius:"12px",padding:"1rem 1.1rem"}}>
+              <div style={{fontSize:"0.65rem",color:"#555",letterSpacing:"0.12em",marginBottom:"0.5rem",fontWeight:"bold"}}>{k.label.toUpperCase()}</div>
+              <div style={{fontSize:"1.6rem",fontWeight:"bold",fontFamily:"'Courier New',monospace",color:k.color}}>{k.value}</div>
+              <div style={{fontSize:"0.7rem",color:"#444",marginTop:"0.2rem"}}>{k.sub}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginBottom:"2rem"}}>
+          <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>LERNFORTSCHRITT PER KATEGORIE</div>
+          {catStats.length===0&&<div style={{color:"#333",fontSize:"0.82rem"}}>Noch keine Einträge vorhanden.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.6rem"}}>
+            {catStats.map(s=>{
+              const col=CAT_COLORS[s.cat];const pct=s.total>0?Math.round((s.verstanden/s.total)*100):0;
+              return(
+                <div key={s.cat} style={{background:"#0f0f0f",border:`1px solid ${col.badge}18`,borderRadius:"12px",padding:"0.9rem 1rem"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:"0.4rem"}}>
+                    <span style={{fontSize:"0.82rem",color:col.badge,fontWeight:"bold"}}>{s.cat}</span>
+                    <span style={{fontSize:"0.78rem",color:"#555"}}>{s.verstanden}/{s.total}</span>
+                  </div>
+                  <div style={{background:"#1a1a1a",borderRadius:"4px",height:"5px",overflow:"hidden"}}>
+                    <div style={{height:"100%",background:col.badge,width:`${pct}%`,borderRadius:"4px",transition:"width 0.5s"}}/>
+                  </div>
+                  <div style={{fontSize:"0.68rem",color:"#444",marginTop:"0.3rem"}}>{pct}% verstanden</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{marginBottom:"2rem"}}>
+          <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>PRÜFUNGSHISTORIE ({pruefHistory.length})</div>
+          {pruefHistory.length===0&&<div style={{color:"#333",fontSize:"0.82rem",padding:"1rem",background:"#0f0f0f",borderRadius:"10px",border:"1px solid #1a1a1a"}}>Noch keine Prüfungen absolviert.</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
+            {pruefHistory.map((h,i)=>{
+              const d=new Date(h.date).toLocaleDateString("de-DE",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+              const c=h.percent>=80?"#22c55e":h.percent>=50?"#eab308":"#ef4444";
+              return(
+                <div key={i} style={{background:"#0f0f0f",border:"1px solid #1a1a1a",borderRadius:"10px",padding:"0.85rem 1.1rem",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"1rem",flexWrap:"wrap"}}>
+                  <div><div style={{fontSize:"0.85rem",color:"#ccc",fontWeight:"bold"}}>{h.title}</div><div style={{fontSize:"0.7rem",color:"#444",marginTop:"0.1rem"}}>{d} · {h.schwierigkeit} · {h.total} Fragen</div></div>
+                  <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:"1.1rem",fontWeight:"bold",fontFamily:"'Courier New',monospace",color:c}}>{h.percent}%</div><div style={{fontSize:"0.68rem",color:"#555"}}>{h.mcScore}/{h.mcTotal} MC</div></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{marginBottom:"2rem"}}>
+          <div style={{fontSize:"0.65rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.75rem",fontWeight:"bold"}}>ABFRAGE-VERLAUF ({abfrageHistory.length})</div>
+          {abfrageHistory.length===0&&<div style={{color:"#333",fontSize:"0.82rem",padding:"1rem",background:"#0f0f0f",borderRadius:"10px",border:"1px solid #1a1a1a"}}>Noch keine Abfragen absolviert.</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
+            {abfrageHistory.slice(0,15).map((h,i)=>{
+              const pct=h.total>0?Math.round((h.correct/h.total)*100):0;
+              const c=pct>=80?"#22c55e":pct>=50?"#eab308":"#ef4444";
+              const d=new Date(h.date).toLocaleDateString("de-DE",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+              return(
+                <div key={i} style={{background:"#0f0f0f",border:"1px solid #1a1a1a",borderRadius:"10px",padding:"0.75rem 1.1rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><div style={{fontSize:"0.82rem",color:"#ccc"}}>{d}</div><div style={{fontSize:"0.7rem",color:"#444"}}>{h.total} Fragen{h.cats?.length>0?` · ${h.cats.join(", ")}`:""}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:"1rem",fontWeight:"bold",fontFamily:"'Courier New',monospace",color:c}}>{pct}%</div><div style={{fontSize:"0.68rem",color:"#555"}}>{h.correct}/{h.total} richtig</div></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {(pruefHistory.length>0||abfrageHistory.length>0)&&(
+          <button onClick={()=>{if(window.confirm("Alle Prüfungs- und Abfrage-Historie löschen?")){localStorage.removeItem("fisi_pruef_history");localStorage.removeItem("fisi_abfrage_history");window.location.reload();}}} style={{padding:"0.6rem 1.2rem",borderRadius:"8px",background:"none",border:"1px solid #3a1a1a",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.78rem"}}>
+            🗑 Verlauf löschen
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
-const PASSWORT = "fisi2026"; // Hier Passwort ändern!
+const PASSWORT = "fisi2026";
 
 function LoginScreen({ onLogin }) {
   const [pw, setPw] = useState("");
   const [fehler, setFehler] = useState(false);
   const [shake, setShake] = useState(false);
   const inputRef = useRef();
-
   useEffect(() => { inputRef.current?.focus(); }, []);
-
   const check = () => {
-    if (pw === PASSWORT) {
-      sessionStorage.setItem("fisi_auth", "1");
-      onLogin();
-    } else {
-      setFehler(true);
-      setShake(true);
-      setPw("");
-      setTimeout(() => setShake(false), 500);
-      setTimeout(() => setFehler(false), 3000);
-      inputRef.current?.focus();
-    }
+    if (pw === PASSWORT) { sessionStorage.setItem("fisi_auth", "1"); onLogin(); }
+    else { setFehler(true); setShake(true); setPw(""); setTimeout(() => setShake(false), 500); setTimeout(() => setFehler(false), 3000); inputRef.current?.focus(); }
   };
-
   return (
     <div style={{minHeight:"100vh",background:"#070707",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <style>{`
         @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
         @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        .login-box{animation:fadeIn 0.4s ease}
-        .shake{animation:shake 0.4s ease}
+        .login-box{animation:fadeIn 0.4s ease}.shake{animation:shake 0.4s ease}
       `}</style>
       <div className="login-box" style={{width:"100%",maxWidth:"380px",padding:"0 1.5rem"}}>
-        {/* Logo */}
         <div style={{textAlign:"center",marginBottom:"2rem"}}>
           <div style={{width:"56px",height:"56px",background:"#fff",borderRadius:"14px",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1rem"}}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1259,37 +1279,13 @@ function LoginScreen({ onLogin }) {
           <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.3rem",fontWeight:"bold",color:"#fff"}}>FISI Lernportal</div>
           <div style={{fontSize:"0.72rem",color:"#444",letterSpacing:"0.12em",marginTop:"0.3rem"}}>IHK HEILBRONN · PRÜFUNG 2026</div>
         </div>
-
-        {/* Login Box */}
         <div className={shake?"shake":""} style={{background:"#0f0f0f",border:`1px solid ${fehler?"#ef444440":"#1e1e1e"}`,borderRadius:"16px",padding:"1.75rem",transition:"border-color 0.3s"}}>
           <div style={{fontSize:"0.72rem",color:"#555",letterSpacing:"0.15em",marginBottom:"1rem",fontWeight:"bold"}}>ZUGANG</div>
-
-          <input
-            ref={inputRef}
-            type="password"
-            value={pw}
-            onChange={e=>{setPw(e.target.value);setFehler(false);}}
-            onKeyDown={e=>e.key==="Enter"&&check()}
-            placeholder="Passwort eingeben..."
-            style={{width:"100%",background:"#161616",border:`1px solid ${fehler?"#ef4444":"#2a2a2a"}`,borderRadius:"10px",padding:"0.85rem 1rem",color:"#fff",fontSize:"1rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color 0.3s",marginBottom:"0.75rem"}}
-          />
-
-          {fehler&&<div style={{fontSize:"0.78rem",color:"#ef4444",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.4rem"}}>
-            <span>✕</span> Falsches Passwort
-          </div>}
-
-          <button
-            onClick={check}
-            disabled={!pw.trim()}
-            style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:pw.trim()?"#fff":"#1a1a1a",border:"none",color:pw.trim()?"#000":"#444",fontSize:"0.9rem",fontWeight:"bold",cursor:pw.trim()?"pointer":"not-allowed",fontFamily:"inherit",transition:"all 0.2s"}}
-          >
-            Einloggen →
-          </button>
+          <input ref={inputRef} type="password" value={pw} onChange={e=>{setPw(e.target.value);setFehler(false);}} onKeyDown={e=>e.key==="Enter"&&check()} placeholder="Passwort eingeben..." style={{width:"100%",background:"#161616",border:`1px solid ${fehler?"#ef4444":"#2a2a2a"}`,borderRadius:"10px",padding:"0.85rem 1rem",color:"#fff",fontSize:"1rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color 0.3s",marginBottom:"0.75rem"}}/>
+          {fehler&&<div style={{fontSize:"0.78rem",color:"#ef4444",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.4rem"}}><span>✕</span> Falsches Passwort</div>}
+          <button onClick={check} disabled={!pw.trim()} style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:pw.trim()?"#fff":"#1a1a1a",border:"none",color:pw.trim()?"#000":"#444",fontSize:"0.9rem",fontWeight:"bold",cursor:pw.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>Einloggen →</button>
         </div>
-
-        <div style={{textAlign:"center",marginTop:"1.5rem",fontSize:"0.65rem",color:"#2a2a2a"}}>
-          Nur für autorisierte Benutzer
-        </div>
+        <div style={{textAlign:"center",marginTop:"1.5rem",fontSize:"0.65rem",color:"#2a2a2a"}}>Nur für autorisierte Benutzer</div>
       </div>
     </div>
   );
@@ -1300,14 +1296,10 @@ export default function App() {
   const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [page,setPage]=useState("lernportal"); // "lernportal" | "pruefung" | "abfrage"
+  const [page,setPage]=useState("lernportal");
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showMobileFilter,setShowMobileFilter]=useState(false);
-  useEffect(()=>{
-    const check=()=>setIsMobile(window.innerWidth<768);
-    window.addEventListener("resize",check);
-    return ()=>window.removeEventListener("resize",check);
-  },[]);
+  useEffect(()=>{ const check=()=>setIsMobile(window.innerWidth<768); window.addEventListener("resize",check); return ()=>window.removeEventListener("resize",check); },[]);
   const [showUpload,setShowUpload]=useState(false);
   const [selected,setSelected]=useState(null);
   const [kiItem,setKiItem]=useState(null);
@@ -1321,38 +1313,14 @@ export default function App() {
   const [fortschrittData,setFortschrittData]=useState(()=>{try{return JSON.parse(localStorage.getItem("fisi_fp")||"{}");}catch(e){return {};}});
 
   const fortschritt=fortschrittData;
-  const markVerstanden=(id,val)=>{
-    setFortschrittData(prev=>{
-      const next={...prev,[id]:{...prev[id],verstanden:val,verstanden_am:val?Date.now():null}};
-      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
-      return next;
-    });
-  };
-  const markGeoeffnet=(id)=>{
-    setFortschrittData(prev=>{
-      const next={...prev,[id]:{...prev[id],geoeffnet_am:Date.now()}};
-      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
-      return next;
-    });
-  };
-  const saveNotiz=(id,text)=>{
-    setFortschrittData(prev=>{
-      const next={...prev,[id]:{...prev[id],notiz:text}};
-      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
-      return next;
-    });
-  };
+  const markVerstanden=(id,val)=>{ setFortschrittData(prev=>{ const next={...prev,[id]:{...prev[id],verstanden:val,verstanden_am:val?Date.now():null}}; try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){} return next; }); };
+  const markGeoeffnet=(id)=>{ setFortschrittData(prev=>{ const next={...prev,[id]:{...prev[id],geoeffnet_am:Date.now()}}; try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){} return next; }); };
+  const saveNotiz=(id,text)=>{ setFortschrittData(prev=>{ const next={...prev,[id]:{...prev[id],notiz:text}}; try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){} return next; }); };
 
   if(!supabase) return <SetupBanner/>;
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
-  const loadItems=async()=>{
-    setLoading(true);
-    const{data,error}=await supabase.from(TABLE).select("*").order("created_at",{ascending:false});
-    if(!error)setItems(data||[]);
-    else showToast("Fehler: "+error.message,"err");
-    setLoading(false);
-  };
+  const loadItems=async()=>{ setLoading(true); const{data,error}=await supabase.from(TABLE).select("*").order("created_at",{ascending:false}); if(!error)setItems(data||[]); else showToast("Fehler: "+error.message,"err"); setLoading(false); };
   useEffect(()=>{ if(loggedIn) loadItems(); },[loggedIn]);
 
   const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
@@ -1389,21 +1357,15 @@ export default function App() {
         @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
         @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0c0c0c}::-webkit-scrollbar-thumb{background:#252525;border-radius:3px}
-        .card{transition:transform .18s,box-shadow .18s;cursor:pointer}
-        .card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
+        .card{transition:transform .18s,box-shadow .18s;cursor:pointer}.card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
         .sbtn{transition:all .15s}.sbtn:hover{color:#ccc!important;background:#111!important}
-        .sidebar{transition:width 0.3s ease,opacity 0.3s ease}
-        .navbtn{transition:all 0.2s}
+        .sidebar{transition:width 0.3s ease,opacity 0.3s ease}.navbtn{transition:all 0.2s}
         body{margin:0;padding:0;background:#070707}
-        .mobile-bottom-nav{display:none}
-        .mobile-filter-overlay{display:none}
+        .mobile-bottom-nav{display:none}.mobile-filter-overlay{display:none}
         @media(max-width:767px){
-          .mobile-bottom-nav{display:flex!important}
-          .mobile-filter-overlay{display:block!important}
-          .desktop-nav{display:none!important}
-          .desktop-sidebar{display:none!important}
-          .desktop-header-left{display:none!important}
-          .mobile-grid{grid-template-columns:1fr!important}
+          .mobile-bottom-nav{display:flex!important}.mobile-filter-overlay{display:block!important}
+          .desktop-nav{display:none!important}.desktop-sidebar{display:none!important}
+          .desktop-header-left{display:none!important}.mobile-grid{grid-template-columns:1fr!important}
           body{padding-bottom:70px}
         }
       `}</style>
@@ -1412,7 +1374,6 @@ export default function App() {
 
       {/* Header */}
       <div style={{borderBottom:"1px solid #111",background:"#090909",padding:isMobile?"0.65rem 1rem":"0.75rem 1.75rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"0.75rem",position:"sticky",top:0,zIndex:50}}>
-        {/* Logo */}
         <div style={{display:"flex",alignItems:"center",gap:"0.65rem",minWidth:0}}>
           {!isMobile&&page==="lernportal"&&<button onClick={()=>setSideOpen(o=>!o)} className="desktop-header-left" style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem",cursor:"pointer",color:"#555",flexShrink:0,display:"flex",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#555"}><Icon name={sideOpen?"sideOpen":"sideClose"} size={17}/></button>}
           <div style={{width:isMobile?"30px":"34px",height:isMobile?"30px":"34px",background:"#fff",borderRadius:"9px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon name="book" size={isMobile?16:18}/></div>
@@ -1421,34 +1382,19 @@ export default function App() {
             <div style={{fontSize:"0.55rem",color:"#444",letterSpacing:"0.08em",whiteSpace:"nowrap"}}>IHK HEILBRONN · {items.length} EINTRÄGE</div>
           </div>
         </div>
-
-        {/* Desktop Navigation */}
         <div className="desktop-nav" style={{display:isMobile?"none":"flex",gap:"0.4rem",alignItems:"center"}}>
-          <button onClick={()=>setPage("lernportal")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="lernportal"?"#fff":"transparent",color:page==="lernportal"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="lernportal"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}>
-            <Icon name="book" size={14}/>Lernportal
-          </button>
-          <button onClick={()=>setPage("pruefung")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="pruefung"?"#eab308":"transparent",color:page==="pruefung"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="pruefung"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}>
-            <Icon name="pruefung" size={14}/>Prüfung erstellen
-          </button>
-          <button onClick={()=>setPage("abfrage")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="abfrage"?"#a855f7":"transparent",color:page==="abfrage"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="abfrage"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}>
-            <Icon name="quiz" size={14}/>Abfrage-Modus
-          </button>
+          <button onClick={()=>setPage("lernportal")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="lernportal"?"#fff":"transparent",color:page==="lernportal"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="lernportal"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="book" size={14}/>Lernportal</button>
+          <button onClick={()=>setPage("pruefung")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="pruefung"?"#eab308":"transparent",color:page==="pruefung"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="pruefung"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="pruefung" size={14}/>Prüfung erstellen</button>
+          <button onClick={()=>setPage("abfrage")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="abfrage"?"#a855f7":"transparent",color:page==="abfrage"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="abfrage"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="quiz" size={14}/>Abfrage-Modus</button>
+          <button onClick={()=>setPage("statistik")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="statistik"?"#22c55e":"transparent",color:page==="statistik"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="statistik"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="chart" size={14}/>Statistik</button>
           <div style={{width:"1px",height:"20px",background:"#1e1e1e",margin:"0 0.2rem"}}/>
           <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem 0.8rem",color:"#555",cursor:"pointer",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="refresh" size={13}/>Sync</button>
           {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:"0.45rem",background:"#fff",color:"#000",border:"none",borderRadius:"8px",padding:"0.5rem 1rem",fontSize:"0.82rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}><Icon name="plus" size={14}/>Hinzufügen</button>}
         </div>
-
-        {/* Mobile Header rechts */}
         {isMobile&&<div style={{display:"flex",gap:"0.4rem",alignItems:"center",flexShrink:0}}>
-          {page==="lernportal"&&<button onClick={()=>setShowMobileFilter(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#aaa",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}>
-            ⚙️ Filter
-          </button>}
-          {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{background:"#fff",border:"none",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#000",fontSize:"0.78rem",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.3rem"}}>
-            <Icon name="plus" size={14}/>
-          </button>}
-          <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.5rem",cursor:"pointer",color:"#555",display:"flex",alignItems:"center"}}>
-            <Icon name="refresh" size={15}/>
-          </button>
+          {page==="lernportal"&&<button onClick={()=>setShowMobileFilter(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#aaa",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}>⚙️ Filter</button>}
+          {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{background:"#fff",border:"none",borderRadius:"8px",padding:"0.5rem 0.75rem",cursor:"pointer",color:"#000",fontSize:"0.78rem",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.3rem"}}><Icon name="plus" size={14}/></button>}
+          <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.5rem",cursor:"pointer",color:"#555",display:"flex",alignItems:"center"}}><Icon name="refresh" size={15}/></button>
         </div>}
       </div>
 
@@ -1483,8 +1429,6 @@ export default function App() {
 
       {/* Body */}
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-
-        {/* Sidebar – nur im Lernportal, nur auf Desktop */}
         {page==="lernportal"&&!isMobile&&(
           <div className="sidebar desktop-sidebar" style={{width:sideOpen?"210px":"0px",opacity:sideOpen?1:0,overflow:"hidden",flexShrink:0,borderRight:sideOpen?"1px solid #0f0f0f":"none",background:"#090909"}}>
             <div style={{width:"210px",padding:"1rem 0.65rem",display:"flex",flexDirection:"column",gap:"2px",overflowY:"auto",height:"100%"}}>
@@ -1504,13 +1448,9 @@ export default function App() {
                   <Icon name="star" size={12}/><span>Favoriten</span>
                   {items.filter(i=>i.starred).length>0&&<span style={{fontSize:"0.62rem",background:"#0f0f0f",padding:"0.08rem 0.35rem",borderRadius:"4px",color:"#444",marginLeft:"auto"}}>{items.filter(i=>i.starred).length}</span>}
                 </button>
-                {/* Prüfung Button in Sidebar */}
-                <button onClick={()=>setPage("pruefung")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}>
-                  <Icon name="pruefung" size={12}/><span>Prüfung erstellen</span>
-                </button>
-                <button onClick={()=>setPage("abfrage")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}>
-                  <Icon name="quiz" size={12}/><span>Abfrage-Modus</span>
-                </button>
+                <button onClick={()=>setPage("pruefung")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="pruefung" size={12}/><span>Prüfung erstellen</span></button>
+                <button onClick={()=>setPage("abfrage")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="quiz" size={12}/><span>Abfrage-Modus</span></button>
+                <button onClick={()=>setPage("statistik")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="chart" size={12}/><span>Statistik</span></button>
               </SideSection>
               <div style={{marginTop:"auto",padding:"0.75rem 0.5rem",borderTop:"1px solid #0f0f0f"}}>
                 <div style={{fontSize:"0.58rem",color:"#2a2a2a",letterSpacing:"0.15em",marginBottom:"0.5rem"}}>STATISTIK</div>
@@ -1525,11 +1465,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Prüfungs-Generator Seite */}
         {page==="pruefung" && <PruefungsGenerator items={items}/>}
         {page==="abfrage" && <AbfrageModus items={items}/>}
+        {page==="statistik" && <StatistikPage items={items} fortschrittData={fortschrittData}/>}
 
-        {/* Lernportal Seite */}
         {page==="lernportal" && (
           <div style={{flex:1,padding:isMobile?"0.75rem":"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
             <div style={{position:"relative",marginBottom:"1.1rem"}}>
@@ -1537,7 +1476,6 @@ export default function App() {
               <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Suchen nach Titel, Inhalt, Tags..." style={{width:"100%",background:"#0d0d0d",border:"1px solid #181818",borderRadius:"9px",padding:isMobile?"0.85rem 1rem 0.85rem 2.4rem":"0.7rem 1rem 0.7rem 2.4rem",color:"#bbb",fontSize:isMobile?"1rem":"0.86rem",outline:"none",fontFamily:"inherit"}}/>
               {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:"0.7rem",top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#444",cursor:"pointer"}}><Icon name="close" size={12}/></button>}
             </div>
-
             {(filterCat!=="Alle"||filterType!=="Alle"||filterStarred||search)&&(
               <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginBottom:"0.75rem",alignItems:"center"}}>
                 <span style={{fontSize:"0.65rem",color:"#555"}}>Filter:</span>
@@ -1548,9 +1486,7 @@ export default function App() {
                 <button onClick={()=>{setFilterCat("Alle");setFilterType("Alle");setFilterStarred(false);setSearch("");}} style={{fontSize:"0.65rem",color:"#555",background:"none",border:"none",cursor:"pointer",marginLeft:"0.25rem"}}>Alle zurücksetzen</button>
               </div>
             )}
-
             {loading&&<div style={{textAlign:"center",padding:"5rem",color:"#2a2a2a",fontSize:"0.75rem",letterSpacing:"0.2em",animation:"pulse 1.5s infinite"}}>WIRD GELADEN...</div>}
-
             {!loading&&filtered.length===0&&(
               <div style={{textAlign:"center",padding:"5rem 2rem"}}>
                 <div style={{fontSize:"3rem",marginBottom:"1rem"}}>📚</div>
@@ -1560,7 +1496,6 @@ export default function App() {
                 )}
               </div>
             )}
-
             {!loading&&filtered.length>0&&(
               <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(285px,1fr))",gap:isMobile?"0.75rem":"0.9rem"}}>
                 {filtered.map(item=>{
@@ -1577,7 +1512,7 @@ export default function App() {
                         {fi&&<span style={{fontSize:"0.56rem",color:fi.color,background:`${fi.color}10`,padding:"0.16rem 0.45rem",borderRadius:"4px",border:`1px solid ${fi.color}22`,fontWeight:"bold"}}>{fi.icon} {fi.label}</span>}
                         {videos.length>0&&<span style={{fontSize:"0.56rem",color:"#ef4444",background:"#ef444410",padding:"0.16rem 0.45rem",borderRadius:"4px",border:"1px solid #ef444422",fontWeight:"bold"}}>🎬{videos.length}</span>}
                       </div>
-                      <div onClick={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(item); }} style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"1rem":"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
+                      <div onClick={()=>{ if(window.speechSynthesis)try{window.speechSynthesis.cancel();}catch(e){} setSelected(item); }} style={{fontFamily:"'Courier New',monospace",fontSize:isMobile?"1rem":"0.9rem",fontWeight:"bold",color:"#e0e0e0",marginBottom:"0.4rem",lineHeight:1.35}}>{item.title}</div>
                       <div onClick={()=>setSelected(item)} style={{fontSize:"0.74rem",color:"#4a4a4a",lineHeight:"1.6",fontFamily:"'Courier New',monospace"}}>{preview}</div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"0.85rem",paddingTop:"0.65rem",borderTop:`1px solid ${col.badge}10`}}>
                         <div style={{display:"flex",gap:"0.25rem",flexWrap:"wrap"}}>
@@ -1606,12 +1541,11 @@ export default function App() {
             {id:"lernportal",icon:"book",label:"Lernen",color:"#fff"},
             {id:"pruefung",icon:"pruefung",label:"Prüfung",color:"#eab308"},
             {id:"abfrage",icon:"quiz",label:"Abfrage",color:"#a855f7"},
+            {id:"statistik",icon:"chart",label:"Statistik",color:"#22c55e"},
           ].map(tab=>(
             <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
-              <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent",transition:"all 0.2s"}}>
-                <Icon name={tab.icon} size={18}/>
-              </div>
-              <span style={{fontSize:"0.6rem",fontWeight:page===tab.id?"bold":"normal",letterSpacing:"0.02em"}}>{tab.label}</span>
+              <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent"}}><Icon name={tab.icon} size={18}/></div>
+              <span style={{fontSize:"0.6rem",fontWeight:page===tab.id?"bold":"normal"}}>{tab.label}</span>
             </button>
           ))}
         </div>
