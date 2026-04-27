@@ -1007,7 +1007,7 @@ function UploadModal({ onClose, onRefresh }) {
 }
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
-function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobile }) {
+function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
   const [downloading,setDownloading]=useState(false);
   const [speaking,setSpeaking]=useState(false);
   const [activeVideo,setActiveVideo]=useState(null);
@@ -1138,43 +1138,38 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
             <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
               {videos.map((v,i)=>(
                 <div key={i} style={{borderRadius:"12px",overflow:"hidden",border:"1px solid #1e1e1e",background:"#0f0f0f"}}>
-                  {/* Thumbnail mit Play-Button */}
-                  <div style={{position:"relative",paddingBottom:"56.25%",background:"#111",cursor:"pointer",overflow:"hidden"}}
-                    onClick={()=>{
-                      if(isMobile){
-                        // Auf Mobile: direkt YouTube App / Safari öffnen
-                        window.open(`https://www.youtube.com/watch?v=${v.id}`,"_blank");
-                      } else {
-                        setActiveVideo(activeVideo===i?null:i);
-                      }
-                    }}>
-                    {/* Eingebetteter Player – nur Desktop wenn aktiv */}
-                    {!isMobile&&activeVideo===i ? (
+                  {/* Video Thumbnail */}
+                  {activeVideo===i&&!isMobile ? (
+                    <div style={{position:"relative",paddingBottom:"56.25%",background:"#000"}}>
                       <iframe
-                        src={`https://www.youtube.com/embed/${v.id}?autoplay=1&rel=0`}
+                        src={"https://www.youtube.com/embed/"+v.id+"?autoplay=1&rel=0"}
                         style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none"}}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
                         title={v.title}
                       />
-                    ) : (
-                      <>
-                        <img
-                          src={`https://img.youtube.com/vi/${v.id}/maxresdefault.jpg`}
-                          onError={e=>{e.target.src=`https://img.youtube.com/vi/${v.id}/hqdefault.jpg`;}}
-                          alt={v.title}
-                          style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
-                        />
-                        {/* Play Button */}
-                        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.5rem"}}>
-                          <div style={{width:isMobile?"72px":"64px",height:isMobile?"72px":"64px",background:"rgba(255,0,0,0.92)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 24px rgba(0,0,0,0.6)"}}>
-                            <svg width={isMobile?30:26} height={isMobile?30:26} viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
-                          </div>
-                          {isMobile&&<div style={{background:"rgba(0,0,0,0.7)",borderRadius:"20px",padding:"0.25rem 0.75rem",fontSize:"0.72rem",color:"#fff"}}>In YouTube öffnen</div>}
+                    </div>
+                  ) : (
+                    <a
+                      href={"https://www.youtube.com/watch?v="+v.id}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={isMobile?undefined:(e)=>{e.preventDefault();setActiveVideo(i);}}
+                      style={{display:"block",position:"relative",paddingBottom:"56.25%",background:"#1a1a1a",overflow:"hidden",textDecoration:"none"}}
+                    >
+                      <img
+                        src={"https://img.youtube.com/vi/"+v.id+"/hqdefault.jpg"}
+                        alt={v.title}
+                        style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:0.85}}
+                      />
+                      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.6rem"}}>
+                        <div style={{width:"68px",height:"68px",background:"rgba(220,0,0,0.92)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(0,0,0,0.5)"}}>
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21"/></svg>
                         </div>
-                      </>
-                    )}
-                  </div>
+                        {isMobile&&<span style={{background:"rgba(0,0,0,0.75)",color:"#fff",fontSize:"0.72rem",padding:"0.2rem 0.8rem",borderRadius:"20px"}}>In YouTube öffnen</span>}
+                      </div>
+                    </a>
+                  )}
                   <div style={{padding:"0.65rem 0.9rem",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem"}}>
                     <div style={{fontSize:"0.82rem",color:"#ccc",fontWeight:"bold",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.title}</div>
                     <div style={{display:"flex",gap:"0.4rem",flexShrink:0}}>
@@ -1209,8 +1204,90 @@ function SideSection({ title, children, defaultOpen=true }) {
   );
 }
 
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+const PASSWORT = "fisi2026"; // Hier Passwort ändern!
+
+function LoginScreen({ onLogin }) {
+  const [pw, setPw] = useState("");
+  const [fehler, setFehler] = useState(false);
+  const [shake, setShake] = useState(false);
+  const inputRef = useRef();
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const check = () => {
+    if (pw === PASSWORT) {
+      sessionStorage.setItem("fisi_auth", "1");
+      onLogin();
+    } else {
+      setFehler(true);
+      setShake(true);
+      setPw("");
+      setTimeout(() => setShake(false), 500);
+      setTimeout(() => setFehler(false), 3000);
+      inputRef.current?.focus();
+    }
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#070707",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <style>{`
+        @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        .login-box{animation:fadeIn 0.4s ease}
+        .shake{animation:shake 0.4s ease}
+      `}</style>
+      <div className="login-box" style={{width:"100%",maxWidth:"380px",padding:"0 1.5rem"}}>
+        {/* Logo */}
+        <div style={{textAlign:"center",marginBottom:"2rem"}}>
+          <div style={{width:"56px",height:"56px",background:"#fff",borderRadius:"14px",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1rem"}}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+            </svg>
+          </div>
+          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.3rem",fontWeight:"bold",color:"#fff"}}>FISI Lernportal</div>
+          <div style={{fontSize:"0.72rem",color:"#444",letterSpacing:"0.12em",marginTop:"0.3rem"}}>IHK HEILBRONN · PRÜFUNG 2026</div>
+        </div>
+
+        {/* Login Box */}
+        <div className={shake?"shake":""} style={{background:"#0f0f0f",border:`1px solid ${fehler?"#ef444440":"#1e1e1e"}`,borderRadius:"16px",padding:"1.75rem",transition:"border-color 0.3s"}}>
+          <div style={{fontSize:"0.72rem",color:"#555",letterSpacing:"0.15em",marginBottom:"1rem",fontWeight:"bold"}}>ZUGANG</div>
+
+          <input
+            ref={inputRef}
+            type="password"
+            value={pw}
+            onChange={e=>{setPw(e.target.value);setFehler(false);}}
+            onKeyDown={e=>e.key==="Enter"&&check()}
+            placeholder="Passwort eingeben..."
+            style={{width:"100%",background:"#161616",border:`1px solid ${fehler?"#ef4444":"#2a2a2a"}`,borderRadius:"10px",padding:"0.85rem 1rem",color:"#fff",fontSize:"1rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color 0.3s",marginBottom:"0.75rem"}}
+          />
+
+          {fehler&&<div style={{fontSize:"0.78rem",color:"#ef4444",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.4rem"}}>
+            <span>✕</span> Falsches Passwort
+          </div>}
+
+          <button
+            onClick={check}
+            disabled={!pw.trim()}
+            style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:pw.trim()?"#fff":"#1a1a1a",border:"none",color:pw.trim()?"#000":"#444",fontSize:"0.9rem",fontWeight:"bold",cursor:pw.trim()?"pointer":"not-allowed",fontFamily:"inherit",transition:"all 0.2s"}}
+          >
+            Einloggen →
+          </button>
+        </div>
+
+        <div style={{textAlign:"center",marginTop:"1.5rem",fontSize:"0.65rem",color:"#2a2a2a"}}>
+          Nur für autorisierte Benutzer
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
+  const [loggedIn,setLoggedIn]=useState(()=>sessionStorage.getItem("fisi_auth")==="1");
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [page,setPage]=useState("lernportal"); // "lernportal" | "pruefung" | "abfrage"
@@ -1232,6 +1309,7 @@ export default function App() {
   const [toast,setToast]=useState(null);
   const [sideOpen,setSideOpen]=useState(true);
 
+  if(!loggedIn) return <LoginScreen onLogin={()=>setLoggedIn(true)}/>;
   if(!supabase) return <SetupBanner/>;
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
@@ -1504,7 +1582,7 @@ export default function App() {
       )}
 
       {showUpload&&<UploadModal onClose={()=>setShowUpload(false)} onRefresh={loadItems}/>}
-      {selected&&<DetailModal item={selected} onClose={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSelected(null); }} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}} isMobile={isMobile}/>}
+      {selected&&<DetailModal item={selected} onClose={()=>{ if(window.speechSynthesis) try{window.speechSynthesis.cancel();}catch(e){} setSpeaking(false); setActiveVideo(null); setSelected(null); }} onDelete={handleDelete} onStar={(id,s)=>{handleStar(id,s);setSelected(p=>p?{...p,starred:s}:null);}} onKI={()=>{setKiItem(selected);setSelected(null);}} onYouTube={()=>{setYoutubeItem(selected);setSelected(null);}}/>}
       {kiItem&&<KIChatModal item={kiItem} onClose={()=>setKiItem(null)}/>}
       {youtubeItem&&<YouTubeModal item={youtubeItem} onClose={()=>setYoutubeItem(null)} onSave={handleYouTubeSave}/>}
     </div>
