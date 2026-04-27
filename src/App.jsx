@@ -1287,7 +1287,7 @@ function LoginScreen({ onLogin }) {
 
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [loggedIn,setLoggedIn]=useState(()=>sessionStorage.getItem("fisi_auth")==="1");
+  const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [page,setPage]=useState("lernportal"); // "lernportal" | "pruefung" | "abfrage"
@@ -1309,7 +1309,6 @@ export default function App() {
   const [toast,setToast]=useState(null);
   const [sideOpen,setSideOpen]=useState(true);
 
-  if(!loggedIn) return <LoginScreen onLogin={()=>setLoggedIn(true)}/>;
   if(!supabase) return <SetupBanner/>;
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
@@ -1346,6 +1345,7 @@ export default function App() {
 
   return(
     <div style={{minHeight:"100vh",background:"#070707",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
+      {!loggedIn&&<LoginScreen onLogin={()=>{ setLoggedIn(true); loadItems(); }}/>}
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
