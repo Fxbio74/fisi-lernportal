@@ -1012,6 +1012,8 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
   const [downloading,setDownloading]=useState(false);
   const [speaking,setSpeaking]=useState(false);
   const [activeVideo,setActiveVideo]=useState(null);
+  const [notizOpen,setNotizOpen]=useState(false);
+  const [notizText,setNotizText]=useState(fortschritt[item.id]?.notiz||"");
   const col=CAT_COLORS[item.category]||CAT_COLORS["Sonstiges"];
   const fi=item.file_name?getFileInfo(item.file_name):null;
   const handleDownloadFile=async()=>{setDownloading(true);try{const{data,error}=await supabase.storage.from(BUCKET).download(item.file_path);if(error)throw error;const a=document.createElement("a");a.href=URL.createObjectURL(data);a.download=item.file_name;a.click();}catch(e){alert("Fehler: "+e.message);}setDownloading(false);};
@@ -1125,6 +1127,13 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube, isMobil
           {item.tags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"0.35rem",marginTop:"0.65rem"}}>{item.tags.map(t=><span key={t} style={{fontSize:"0.65rem",color:"#666",background:"#0f0f0f",padding:"0.12rem 0.4rem",borderRadius:"4px",border:"1px solid #1a1a1a"}}>#{t}</span>)}</div>}
         </div>
         <div style={{padding:"1.75rem"}}>
+          {/* Notiz Box */}
+          {notizOpen&&<div style={{marginBottom:"1.25rem",background:"#0f0f0f",border:"1px solid #eab30830",borderRadius:"12px",padding:"1rem"}}>
+            <div style={{fontSize:"0.7rem",color:"#eab308",letterSpacing:"0.15em",marginBottom:"0.5rem",fontWeight:"bold"}}>📝 MEINE NOTIZ</div>
+            <textarea value={notizText} onChange={e=>setNotizText(e.target.value)} placeholder="Eigene Notizen, Merksätze..." rows={4} style={{width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.75rem",color:"#ddd",fontSize:"0.85rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box"}}/>
+            <button onClick={()=>{saveNotiz(item.id,notizText);setNotizOpen(false);}} style={{marginTop:"0.5rem",padding:"0.5rem 1rem",borderRadius:"8px",background:"#eab308",border:"none",color:"#000",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.82rem",cursor:"pointer"}}>Speichern</button>
+          </div>}
+
           {item.type==="text"&&<div style={{fontFamily:"'Courier New',monospace",fontSize:"0.87rem",color:"#b0b0b0",lineHeight:"1.9",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{item.content}</div>}
           {item.type==="file"&&<div style={{textAlign:"center",padding:"2rem"}}>
             <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{fi?.icon||"📎"}</div>
