@@ -1320,7 +1320,7 @@ export default function App() {
     else showToast("Fehler: "+error.message,"err");
     setLoading(false);
   };
-  useEffect(()=>{loadItems();},[]);
+  useEffect(()=>{ if(loggedIn) loadItems(); },[loggedIn]);
   const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
   const handleStar=async(id,starred)=>{await supabase.from(TABLE).update({starred}).eq("id",id);setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));};
   const handleYouTubeSave=(u)=>{setItems(p=>p.map(i=>i.id===u.id?u:i));if(selected?.id===u.id)setSelected(u);};
