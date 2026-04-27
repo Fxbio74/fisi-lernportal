@@ -1309,6 +1309,30 @@ export default function App() {
   const [filterStarred,setFilterStarred]=useState(false);
   const [toast,setToast]=useState(null);
   const [sideOpen,setSideOpen]=useState(true);
+  const [fortschrittData,setFortschrittData]=useState(()=>{try{return JSON.parse(localStorage.getItem("fisi_fp")||"{}");}catch(e){return {};}});
+
+  const fortschritt=fortschrittData;
+  const markVerstanden=(id,val)=>{
+    setFortschrittData(prev=>{
+      const next={...prev,[id]:{...prev[id],verstanden:val,verstanden_am:val?Date.now():null}};
+      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
+      return next;
+    });
+  };
+  const markGeoeffnet=(id)=>{
+    setFortschrittData(prev=>{
+      const next={...prev,[id]:{...prev[id],geoeffnet_am:Date.now()}};
+      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
+      return next;
+    });
+  };
+  const saveNotiz=(id,text)=>{
+    setFortschrittData(prev=>{
+      const next={...prev,[id]:{...prev[id],notiz:text}};
+      try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){}
+      return next;
+    });
+  };
 
   if(!supabase) return <SetupBanner/>;
 
