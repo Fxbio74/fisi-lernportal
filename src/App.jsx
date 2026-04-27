@@ -1118,7 +1118,7 @@ function DetailModal({ item, onClose, onDelete, onStar, onKI, onYouTube }) {
               </>}
               <button onClick={()=>onStar(item.id,!item.starred)} style={{background:"none",border:"1px solid #1a1a1a",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:item.starred?"#f5c518":"#444"}}><Icon name="star" size={14}/></button>
               <button onClick={()=>{onDelete(item.id,item.file_path);onClose();}} style={{background:"none",border:"1px solid #1a1a1a",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:"#444"}} onMouseEnter={e=>e.currentTarget.style.color="#ef4444"} onMouseLeave={e=>e.currentTarget.style.color="#444"}><Icon name="trash" size={14}/></button>
-              <button onClick={onClose} style={{background:"none",border:"1px solid #1a1a1a",borderRadius:"7px",padding:"0.4rem",cursor:"pointer",color:"#444"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#444"}><Icon name="close" size={14}/></button>
+              <button onClick={onClose} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:"9px",padding:isMobile?"0.65rem":"0.4rem",cursor:"pointer",color:"#888",minWidth:isMobile?"44px":"auto",minHeight:isMobile?"44px":"auto",display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="#888"}><Icon name="close" size={isMobile?18:14}/></button>
             </div>
           </div>
           {item.tags?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"0.35rem",marginTop:"0.65rem"}}>{item.tags.map(t=><span key={t} style={{fontSize:"0.65rem",color:"#666",background:"#0f0f0f",padding:"0.12rem 0.4rem",borderRadius:"4px",border:"1px solid #1a1a1a"}}>#{t}</span>)}</div>}
@@ -1321,8 +1321,6 @@ export default function App() {
   };
   useEffect(()=>{ if(loggedIn) loadItems(); },[loggedIn]);
 
-  // Login Screen - early return nach allen Definitionen
-  if(!loggedIn) return <LoginScreen onLogin={()=>{ setLoggedIn(true); loadItems(); }}/>;
   const handleDelete=async(id,fp)=>{if(fp)await supabase.storage.from(BUCKET).remove([fp]);await supabase.from(TABLE).delete().eq("id",id);setItems(p=>p.filter(i=>i.id!==id));showToast("Gelöscht.","err");};
   const handleStar=async(id,starred)=>{await supabase.from(TABLE).update({starred}).eq("id",id);setItems(p=>p.map(i=>i.id===id?{...i,starred}:i));};
   const handleYouTubeSave=(u)=>{setItems(p=>p.map(i=>i.id===u.id?u:i));if(selected?.id===u.id)setSelected(u);};
@@ -1345,6 +1343,8 @@ export default function App() {
       {badge>0&&<span style={{fontSize:"0.62rem",background:"#0f0f0f",padding:"0.08rem 0.35rem",borderRadius:"4px",color:"#444"}}>{badge}</span>}
     </button>
   );
+
+  if(!loggedIn) return <LoginScreen onLogin={()=>setLoggedIn(true)}/>;
 
   return(
     <div style={{minHeight:"100vh",background:"#070707",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif",display:"flex",flexDirection:"column"}}>
