@@ -1367,8 +1367,9 @@ function KarteikartenModus({ items }) {
   const startGame = () => {
     if (cards.length === 0) return setError("Keine Karten! Warte bis KI fertig ist.");
     const num = Math.min(cards.length, 20);
-    const order = [...Array(cards.length).keys()].sort(() => Math.random()-0.5).slice(0,num);
-    const gs = {order, idx:0, pidx:0, flipped:false, results:{}};
+    // Wähle zufällige Karten und sende die KOMPLETTEN Kartendaten mit
+    const shuffled = [...cards].sort(() => Math.random()-0.5).slice(0, num);
+    const gs = {sharedCards: shuffled, idx:0, pidx:0, flipped:false, results:{}};
     setGameState(gs); setPhase("game"); setReadyToFlip(false);
     bcast(gs, "game", false);
   };
@@ -1385,9 +1386,9 @@ function KarteikartenModus({ items }) {
   };
 
   const doNext = result => {
-    const gs = {...gameState, results:{...gameState.results, [gameState.order[gameState.idx]]:result}};
+    const gs = {...gameState, results:{...gameState.results, [gameState.idx]:result}};
     const next = gs.idx + 1;
-    if (next >= gs.order.length) {
+    if (next >= gs.sharedCards.length) {
       gs.idx = next; setGameState(gs); setPhase("done"); setReadyToFlip(false);
       bcast(gs, "done", false);
     } else {
@@ -1406,8 +1407,9 @@ function KarteikartenModus({ items }) {
     ? myPidx === (gameState.pidx + 1) % players.length
     : false;
 
-  const curCard = gameState && gameState.idx < gameState.order.length
-    ? cards[gameState.order[gameState.idx]] : null;
+  const sharedCards = gameState?.sharedCards || [];
+  const curCard = gameState && gameState.idx < sharedCards.length
+    ? sharedCards[gameState.idx] : null;
   const curPlayer = gameState ? players[gameState.pidx] : null;
   const answerPlayer = gameState && !isSolo
     ? players[(gameState.pidx + 1) % players.length] : null;
@@ -1511,8 +1513,8 @@ function KarteikartenModus({ items }) {
 
   if (phase === "game") {
     const col = curCard ? (CAT_COLORS[curCard.category]||CAT_COLORS["Sonstiges"]) : CAT_COLORS["Sonstiges"];
-    const prog = gameState ? `${Math.min(gameState.idx+1, gameState.order.length)}/${gameState.order.length}` : "–";
-    const pct = gameState ? (gameState.idx/gameState.order.length*100) : 0;
+    const prog = gameState ? `${Math.min(gameState.idx+1, sharedCards.length)}/${sharedCards.length}` : "–";
+    const pct = gameState ? (gameState.idx/sharedCards.length*100) : 0;
 
     return (
       <div style={{flex:1,overflowY:"auto",padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"1rem",maxWidth:"650px",margin:"0 auto",width:"100%"}}>
@@ -1543,48 +1545,76 @@ function KarteikartenModus({ items }) {
            :`👀 ${curPlayer?.name} liest vor`}
         </div>
 
-        {/* Karteikarte */}
+        {/* ════ KARTEIKARTE ════ */}
         {curCard && (
-          <div style={{width:"100%",minHeight:"300px",perspective:"1200px",
-            cursor:(!gameState.flipped&&(isReading||isSolo))?"pointer":"default"}}
+          <div style={{width:"100%",cursor:(!gameState.flipped&&(isReading||isSolo))?"pointer":"default"}}
             onClick={(!gameState.flipped&&(isReading||isSolo))?doFlip:undefined}>
-            <div style={{width:"100%",minHeight:"300px",position:"relative",transformStyle:"preserve-3d",
-              transition:"transform 0.65s cubic-bezier(.4,0,.2,1)",
-              transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
+            <div style={{width:"100%",perspective:"1400px"}}>
+              <div style={{width:"100%",position:"relative",transformStyle:"preserve-3d",
+                transition:"transform 0.7s cubic-bezier(.4,0,.2,1)",
+                transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
 
-              {/* Vorderseite – Frage */}
-              <div style={{position:"absolute",inset:0,minHeight:"300px",backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
-                background:`linear-gradient(135deg,${col.bg}ee,#0a0a0a)`,border:`2px solid ${col.badge}40`,
-                borderRadius:"20px",padding:"2rem",display:"flex",flexDirection:"column",
-                alignItems:"center",justifyContent:"center",textAlign:"center",gap:"1rem"}}>
-                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:col.badge,fontWeight:"bold",
-                  background:`${col.badge}12`,padding:"0.2rem 0.6rem",borderRadius:"4px"}}>
-                  {(curCard.category||"").toUpperCase()}
-                </span>
-                <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.2rem",fontWeight:"bold",color:"#fff",lineHeight:1.5}}>
-                  {curCard.front}
+                {/* VORDERSEITE */}
+                <div style={{
+                  backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
+                  background:"#0d0d0d",
+                  border:`3px solid ${col.badge}`,
+                  borderRadius:"20px",
+                  padding:"2.5rem 2rem 3rem",
+                  minHeight:"320px",
+                  display:"flex",flexDirection:"column",
+                  alignItems:"center",justifyContent:"center",
+                  textAlign:"center",gap:"1.25rem",
+                  position:"relative",
+                  boxShadow:`0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 ${col.badge}30`
+                }}>
+                  <div style={{position:"absolute",top:"1rem",left:"50%",transform:"translateX(-50%)",
+                    background:`${col.badge}20`,border:`1px solid ${col.badge}60`,
+                    borderRadius:"20px",padding:"0.2rem 0.9rem",whiteSpace:"nowrap",
+                    fontSize:"0.58rem",letterSpacing:"0.2em",color:col.badge,fontWeight:"bold"}}>
+                    {(curCard.category||"").toUpperCase()}
+                  </div>
+                  <div style={{fontSize:"2rem"}}>❓</div>
+                  <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.2rem",fontWeight:"bold",
+                    color:"#fff",lineHeight:1.6,maxWidth:"90%"}}>
+                    {curCard.front}
+                  </div>
+                  <div style={{position:"absolute",bottom:"1rem",fontSize:"0.7rem",color:"#333"}}>
+                    {(isReading||isSolo)
+                      ? <span style={{animation:"pulse 2s infinite",display:"block"}}>👆 Tippen zum Aufdecken</span>
+                      : <span>Warte auf {curPlayer?.name}...</span>}
+                  </div>
                 </div>
-                {(isReading||isSolo)&&!gameState.flipped&&(
-                  <div style={{fontSize:"0.72rem",color:"#333",marginTop:"0.5rem",animation:"pulse 2s infinite"}}>
-                    👆 Klicken zum Aufdecken
-                  </div>
-                )}
-                {!isReading&&!isSolo&&!gameState.flipped&&(
-                  <div style={{fontSize:"0.72rem",color:"#333"}}>
-                    Warte auf {curPlayer?.name}...
-                  </div>
-                )}
-              </div>
 
-              {/* Rueckseite – Antwort */}
-              <div style={{position:"absolute",inset:0,minHeight:"300px",backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
-                transform:"rotateY(180deg)",background:"#0a0a0a",border:`2px solid ${col.badge}70`,
-                borderRadius:"20px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"0.75rem",overflowY:"auto"}}>
-                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:"#22c55e",fontWeight:"bold",flexShrink:0}}>✓ ANTWORT</span>
-                <div style={{fontFamily:"'Courier New',monospace",fontSize:"0.88rem",color:"#ccc",lineHeight:"1.75",
-                  flex:1,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>
-                  {curCard.back}
+                {/* RÜCKSEITE */}
+                <div style={{
+                  position:"absolute",inset:0,
+                  backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
+                  transform:"rotateY(180deg)",
+                  background:"#0d0d0d",
+                  border:"3px solid #22c55e",
+                  borderRadius:"20px",
+                  padding:"1.75rem",
+                  minHeight:"320px",
+                  display:"flex",flexDirection:"column",gap:"0.75rem",
+                  overflowY:"auto",
+                  boxShadow:"0 12px 40px rgba(0,0,0,0.7), inset 0 1px 0 #22c55e30"
+                }}>
+                  <div style={{display:"flex",alignItems:"center",gap:"0.5rem",
+                    borderBottom:"1px solid #1e1e1e",paddingBottom:"0.75rem",flexShrink:0}}>
+                    <span style={{fontSize:"1rem"}}>✅</span>
+                    <span style={{fontSize:"0.68rem",letterSpacing:"0.15em",color:"#22c55e",fontWeight:"bold"}}>ANTWORT</span>
+                    <span style={{fontSize:"0.6rem",color:col.badge,background:`${col.badge}15`,
+                      padding:"0.1rem 0.5rem",borderRadius:"10px",marginLeft:"auto"}}>
+                      {(curCard.category||"").toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{fontFamily:"'Courier New',monospace",fontSize:"0.9rem",color:"#e0e0e0",
+                    lineHeight:"1.8",flex:1,wordBreak:"break-word",whiteSpace:"pre-wrap",overflowY:"auto"}}>
+                    {curCard.back}
+                  </div>
                 </div>
+
               </div>
             </div>
           </div>
@@ -1654,7 +1684,7 @@ function KarteikartenModus({ items }) {
   if (phase === "done") {
     const res = gameState?.results || {};
     const known = Object.values(res).filter(r=>r==="known").length;
-    const total = Object.keys(res).length;
+    const total = (gameState?.sharedCards||[]).length;
     const pct = total > 0 ? Math.round(known/total*100) : 0;
     const c = pct>=70?"#22c55e":pct>=40?"#eab308":"#ef4444";
     return (
