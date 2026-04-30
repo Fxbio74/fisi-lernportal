@@ -1552,7 +1552,7 @@ function KarteikartenModus({ items }) {
             <div style={{width:"100%",perspective:"1400px"}}>
               <div style={{width:"100%",position:"relative",transformStyle:"preserve-3d",
                 transition:"transform 0.7s cubic-bezier(.4,0,.2,1)",
-                transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
+                transform:(gameState.flipped&&(isSolo||isReading||(isAnswering&&readyToFlip)))?"rotateY(180deg)":"rotateY(0deg)"}}>
 
                 {/* VORDERSEITE */}
                 <div style={{
@@ -1624,13 +1624,21 @@ function KarteikartenModus({ items }) {
         {gameState?.flipped && (
           <div style={{width:"100%",display:"flex",flexDirection:"column",gap:"0.75rem"}}>
 
-            {/* Antwortender: Fertig-Button */}
-            {!isSolo && isAnswering && !readyToFlip && (
+            {/* Antwortender: Fertig-Button – auch BEVOR Karte aufgedeckt */}
+            {!isSolo && isAnswering && !readyToFlip && gameState.flipped && (
               <button onClick={doReady} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",
                 background:"#3b82f6",border:"none",color:"#fff",
-                fontFamily:"inherit",fontWeight:"bold",fontSize:"0.95rem",cursor:"pointer"}}>
+                fontFamily:"inherit",fontWeight:"bold",fontSize:"0.95rem",cursor:"pointer",
+                animation:"pulse 1.5s infinite"}}>
                 ✋ Fertig – ich habe geantwortet
               </button>
+            )}
+            {/* Antwortender sieht Hinweis während Vorleser noch nicht aufgedeckt hat */}
+            {!isSolo && isAnswering && !readyToFlip && !gameState.flipped && (
+              <div style={{padding:"0.85rem",borderRadius:"12px",background:"#0f0f0f",
+                border:"1px solid #1e1e1e",color:"#555",fontSize:"0.85rem",textAlign:"center"}}>
+                Warte bis {curPlayer?.name} aufdeckt...
+              </div>
             )}
 
             {/* Antwortender: wartet auf Bewertung */}
