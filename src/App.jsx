@@ -208,6 +208,7 @@ const Icon = ({ name, size=18 }) => {
     chart:     <svg width={size} height={size} viewBox="0 0 24 24" {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
     repeat:    <svg width={size} height={size} viewBox="0 0 24 24" {...p}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
     note:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+    card:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="7" y1="15" x2="12" y2="15"/></svg>,
   };
   return icons[name]||null;
 };
@@ -1249,6 +1250,269 @@ function StatistikPage({ items, fortschrittData }) {
     </div>
   );
 }
+// ── Karteikarten Modus ────────────────────────────────────────────────────────
+function KarteikartenModus({ items }) {
+  const myId = useRef(Math.random().toString(36).slice(2,10)).current;
+  const [phase, setPhase] = useState("setup");
+  const [myName, setMyName] = useState("");
+  const [roomCode, setRoomCode] = useState("");
+  const [inputCode, setInputCode] = useState("");
+  const [isHost, setIsHost] = useState(false);
+  const [players, setPlayers] = useState([]);
+  const [gameState, setGameState] = useState(null);
+  const channelRef = useRef(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const cards = items.filter(i => i.type==="text" && i.content)
+    .map(i => ({id:i.id, front:i.title, back:i.content, category:i.category}));
+  const PCOLORS = ["#3b82f6","#a855f7","#f59e0b"];
+
+  const genCode = () => {
+    const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from({length:4},()=>c[Math.floor(Math.random()*c.length)]).join("");
+  };
+
+  const leaveRoom = () => {
+    channelRef.current?.unsubscribe();
+    channelRef.current=null;
+    setPhase("setup"); setPlayers([]); setGameState(null);
+    setIsHost(false); setRoomCode(""); setError("");
+  };
+
+  const connectRoom = (code, host) => {
+    const ch = supabase.channel(`fisi-karten-v2-${code}`,{config:{presence:{key:myId}}});
+    ch.on("presence",{event:"sync"},()=>{
+      const raw=ch.presenceState();
+      const list=Object.entries(raw)
+        .flatMap(([id,arr])=>arr.map(d=>({id,name:d.name,isHost:d.isHost,joinedAt:d.joinedAt})))
+        .sort((a,b)=>a.joinedAt-b.joinedAt).slice(0,3);
+      setPlayers(list);
+    });
+    ch.on("broadcast",{event:"gsync"},({payload})=>{
+      if(payload.gs!==undefined) setGameState(payload.gs);
+      if(payload.ph) setPhase(payload.ph);
+    });
+    ch.subscribe(async status=>{
+      if(status==="SUBSCRIBED"){
+        await ch.track({name:myName.trim(),isHost:host,joinedAt:Date.now()});
+        setPhase("lobby"); setError("");
+      } else if(status==="CHANNEL_ERROR"){
+        setError("Verbindungsfehler. Bitte erneut versuchen.");
+      }
+    });
+    channelRef.current=ch;
+  };
+
+  const bcast=(gs,ph)=>channelRef.current?.send({type:"broadcast",event:"gsync",payload:{gs,ph}});
+
+  const createRoom=()=>{
+    if(!myName.trim()) return setError("Bitte Namen eingeben!");
+    const code=genCode(); setRoomCode(code); setIsHost(true); connectRoom(code,true);
+  };
+  const joinRoom=()=>{
+    if(!myName.trim()) return setError("Bitte Namen eingeben!");
+    const code=inputCode.trim().toUpperCase();
+    if(code.length!==4) return setError("Bitte 4-stelligen Code eingeben!");
+    setRoomCode(code); setIsHost(false); connectRoom(code,false);
+  };
+  const startGame=()=>{
+    if(cards.length===0) return setError("Keine Einträge vorhanden! Füge zuerst Texte hinzu.");
+    const num=Math.min(cards.length,20);
+    const order=[...Array(cards.length).keys()].sort(()=>Math.random()-0.5).slice(0,num);
+    const gs={order,idx:0,pidx:0,flipped:false,results:{}};
+    setGameState(gs); setPhase("game"); bcast(gs,"game");
+  };
+  const doFlip=()=>{
+    const gs={...gameState,flipped:true}; setGameState(gs); bcast(gs,"game");
+  };
+  const doNext=result=>{
+    const gs={...gameState,results:{...gameState.results,[gameState.order[gameState.idx]]:result}};
+    const next=gs.idx+1;
+    if(next>=gs.order.length){
+      gs.idx=next; setGameState(gs); setPhase("done"); bcast(gs,"done");
+    } else {
+      gs.idx=next; gs.pidx=(gs.pidx+1)%Math.max(players.length,1); gs.flipped=false;
+      setGameState(gs); bcast(gs,"game");
+    }
+  };
+
+  const myPidx=players.findIndex(p=>p.id===myId);
+  const isMyTurn=gameState?myPidx===gameState.pidx:false;
+  const canCtrl=isMyTurn||isHost;
+  const curCard=gameState&&gameState.idx<gameState.order.length?cards[gameState.order[gameState.idx]]:null;
+  const curPlayer=gameState?players[gameState.pidx]:null;
+  const inpS={width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"9px",padding:"0.8rem 1rem",color:"#fff",fontSize:"0.95rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+
+  if(phase==="setup") return(
+    <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:"100%",maxWidth:"420px"}}>
+        <div style={{textAlign:"center",marginBottom:"2rem"}}>
+          <div style={{fontSize:"3rem",marginBottom:"0.5rem"}}>🃏</div>
+          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.4rem",fontWeight:"bold",color:"#fff"}}>Karteikarten</div>
+          <div style={{fontSize:"0.78rem",color:"#555",marginTop:"0.3rem"}}>Gemeinsam lernen · bis 3 Personen · Live-Synchronisierung</div>
+        </div>
+        <div style={{background:"#0f0f0f",border:"1px solid #1e1e1e",borderRadius:"16px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"1rem"}}>
+          <div>
+            <label style={{fontSize:"0.62rem",letterSpacing:"0.18em",color:"#555",display:"block",marginBottom:"0.4rem",fontWeight:"600"}}>DEIN NAME</label>
+            <input value={myName} onChange={e=>{setMyName(e.target.value);setError("");}} placeholder="z.B. Fabio" style={inpS} onKeyDown={e=>e.key==="Enter"&&myName.trim()&&createRoom()}/>
+          </div>
+          {error&&<div style={{fontSize:"0.78rem",color:"#ef4444",padding:"0.5rem 0.75rem",background:"#1a0a0a",borderRadius:"8px",border:"1px solid #ef444430"}}>{error}</div>}
+          <button onClick={createRoom} disabled={!myName.trim()} style={{padding:"0.85rem",borderRadius:"10px",background:myName.trim()?"#f97316":"#1a1a1a",border:"none",color:myName.trim()?"#fff":"#444",fontSize:"0.88rem",fontWeight:"bold",cursor:myName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
+            🎲 Neuen Raum erstellen
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}>
+            <div style={{flex:1,height:"1px",background:"#1e1e1e"}}/><span style={{fontSize:"0.68rem",color:"#444"}}>oder beitreten</span><div style={{flex:1,height:"1px",background:"#1e1e1e"}}/>
+          </div>
+          <div style={{display:"flex",gap:"0.5rem"}}>
+            <input value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase().slice(0,4))} placeholder="CODE" style={{...inpS,flex:1,letterSpacing:"0.3em",textAlign:"center",fontFamily:"'Courier New',monospace",fontSize:"1.1rem"}} onKeyDown={e=>e.key==="Enter"&&joinRoom()}/>
+            <button onClick={joinRoom} disabled={!myName.trim()||inputCode.length!==4} style={{padding:"0.8rem 1.2rem",borderRadius:"9px",background:myName.trim()&&inputCode.length===4?"#3b82f6":"#1a1a1a",border:"none",color:myName.trim()&&inputCode.length===4?"#fff":"#444",cursor:myName.trim()&&inputCode.length===4?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.85rem",whiteSpace:"nowrap"}}>
+              Beitreten →
+            </button>
+          </div>
+        </div>
+        <div style={{textAlign:"center",marginTop:"1rem",fontSize:"0.7rem",color:"#2a2a2a"}}>{cards.length} Karten aus {items.filter(i=>i.type==="text").length} Einträgen</div>
+      </div>
+    </div>
+  );
+
+  if(phase==="lobby") return(
+    <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:"100%",maxWidth:"420px",display:"flex",flexDirection:"column",gap:"1.25rem"}}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:"0.62rem",letterSpacing:"0.2em",color:"#555",marginBottom:"0.5rem",fontWeight:"600"}}>RAUM-CODE</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"0.75rem"}}>
+            <div style={{fontFamily:"'Courier New',monospace",fontSize:"2.8rem",fontWeight:"bold",color:"#fff",letterSpacing:"0.35em"}}>{roomCode}</div>
+            <button onClick={()=>{navigator.clipboard?.writeText(roomCode);setCopied(true);setTimeout(()=>setCopied(false),2000);}} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.45rem 0.7rem",cursor:"pointer",color:copied?"#22c55e":"#666",fontSize:"0.72rem",fontFamily:"inherit",flexShrink:0}}>
+              {copied?"✓":"Kopieren"}
+            </button>
+          </div>
+          <div style={{fontSize:"0.7rem",color:"#444",marginTop:"0.35rem"}}>Teile den Code mit bis zu 2 Lernpartnern</div>
+        </div>
+        <div style={{background:"#0f0f0f",border:"1px solid #1e1e1e",borderRadius:"14px",padding:"1.25rem"}}>
+          <div style={{fontSize:"0.6rem",letterSpacing:"0.18em",color:"#555",marginBottom:"0.75rem",fontWeight:"600"}}>SPIELER ({players.length}/3)</div>
+          {players.length===0&&<div style={{color:"#333",fontSize:"0.82rem",textAlign:"center",padding:"1rem 0"}}>Verbinde...</div>}
+          {players.map((p,i)=>(
+            <div key={p.id} style={{display:"flex",alignItems:"center",gap:"0.65rem",padding:"0.55rem 0.5rem",borderRadius:"8px",background:p.id===myId?"#141414":"transparent",marginBottom:"0.3rem"}}>
+              <div style={{width:"30px",height:"30px",borderRadius:"50%",background:`${PCOLORS[i]||"#666"}18`,border:`2px solid ${PCOLORS[i]||"#666"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.8rem",color:PCOLORS[i]||"#666",fontWeight:"bold",flexShrink:0}}>
+                {p.name?.[0]?.toUpperCase()||"?"}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <span style={{fontSize:"0.85rem",color:p.id===myId?"#fff":"#bbb",fontWeight:p.id===myId?"bold":"normal"}}>{p.name}</span>
+                {p.id===myId&&<span style={{fontSize:"0.62rem",color:"#444",marginLeft:"0.5rem"}}>(Du)</span>}
+              </div>
+              {p.isHost&&<span style={{fontSize:"0.6rem",color:"#eab308",background:"#eab30812",padding:"0.12rem 0.4rem",borderRadius:"4px"}}>HOST</span>}
+              <div style={{width:"7px",height:"7px",borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
+            </div>
+          ))}
+        </div>
+        {error&&<div style={{fontSize:"0.78rem",color:"#ef4444",padding:"0.5rem 0.75rem",background:"#1a0a0a",borderRadius:"8px",border:"1px solid #ef444430"}}>{error}</div>}
+        <div style={{display:"flex",gap:"0.75rem"}}>
+          <button onClick={leaveRoom} style={{padding:"0.75rem 1rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>← Verlassen</button>
+          {isHost
+            ?<button onClick={startGame} style={{flex:1,padding:"0.75rem",borderRadius:"10px",background:"#f97316",border:"none",color:"#fff",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit",fontSize:"0.88rem"}}>
+               {players.length<2?"Solo starten":"Spiel starten ("+players.length+" Spieler)"}
+             </button>
+            :<div style={{flex:1,padding:"0.75rem",borderRadius:"10px",background:"#0f0f0f",border:"1px solid #1e1e1e",color:"#444",fontSize:"0.82rem",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>Warte auf Host...</div>
+          }
+        </div>
+      </div>
+    </div>
+  );
+
+  if(phase==="game"){
+    const col=curCard?(CAT_COLORS[curCard.category]||CAT_COLORS["Sonstiges"]):CAT_COLORS["Sonstiges"];
+    const prog=gameState?`${Math.min(gameState.idx+1,gameState.order.length)}/${gameState.order.length}`:"–";
+    const pct=gameState?(gameState.idx/gameState.order.length*100):0;
+    return(
+      <div style={{flex:1,overflowY:"auto",padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"1rem",maxWidth:"650px",margin:"0 auto",width:"100%"}}>
+        {/* Spieler-Pills */}
+        <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",justifyContent:"center",width:"100%",alignItems:"center"}}>
+          {players.map((p,i)=>(
+            <div key={p.id} style={{display:"flex",alignItems:"center",gap:"0.35rem",padding:"0.3rem 0.65rem",borderRadius:"20px",background:gameState&&i===gameState.pidx?`${PCOLORS[i]||"#666"}18`:"#0f0f0f",border:`1px solid ${gameState&&i===gameState.pidx?(PCOLORS[i]||"#666"):"#1e1e1e"}`,transition:"all 0.3s"}}>
+              <div style={{width:"18px",height:"18px",borderRadius:"50%",background:`${PCOLORS[i]||"#666"}25`,border:`1.5px solid ${PCOLORS[i]||"#666"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.6rem",color:PCOLORS[i]||"#666",fontWeight:"bold"}}>{p.name?.[0]?.toUpperCase()||"?"}</div>
+              <span style={{fontSize:"0.73rem",color:gameState&&i===gameState.pidx?(PCOLORS[i]||"#666"):"#555",fontWeight:gameState&&i===gameState.pidx?"bold":"normal"}}>{p.name}</span>
+            </div>
+          ))}
+          <span style={{fontSize:"0.7rem",color:"#444",fontFamily:"'Courier New',monospace",marginLeft:"auto"}}>{prog}</span>
+        </div>
+        {/* Progress bar */}
+        <div style={{width:"100%",background:"#0f0f0f",borderRadius:"4px",height:"3px",overflow:"hidden"}}>
+          <div style={{height:"100%",background:"#f97316",width:`${pct}%`,transition:"width 0.4s",borderRadius:"4px"}}/>
+        </div>
+        {/* Turn indicator */}
+        {curPlayer&&(
+          <div style={{padding:"0.45rem 1.1rem",borderRadius:"20px",background:isMyTurn?"#f9731615":"#0f0f0f",border:`1px solid ${isMyTurn?"#f97316":"#1e1e1e"}`,fontSize:"0.8rem",color:isMyTurn?"#f97316":"#666",fontWeight:"bold",transition:"all 0.3s"}}>
+            {isMyTurn?"✋ Du bist dran!":"🎯 "+curPlayer.name+" ist dran"}
+          </div>
+        )}
+        {/* Flip Card */}
+        {curCard&&(
+          <div style={{width:"100%",height:"320px",perspective:"1200px",cursor:!gameState.flipped&&canCtrl?"pointer":"default"}} onClick={!gameState.flipped&&canCtrl?doFlip:undefined}>
+            <div style={{width:"100%",height:"100%",position:"relative",transformStyle:"preserve-3d",transition:"transform 0.65s cubic-bezier(.4,0,.2,1)",transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
+              {/* Vorderseite – Frage */}
+              <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",background:`linear-gradient(135deg,${col.bg}ee,#0a0a0a)`,border:`2px solid ${col.badge}40`,borderRadius:"20px",padding:"2rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",gap:"1rem"}}>
+                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:col.badge,fontWeight:"bold",background:`${col.badge}12`,padding:"0.2rem 0.6rem",borderRadius:"4px"}}>{(curCard.category||"").toUpperCase()}</span>
+                <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.15rem",fontWeight:"bold",color:"#fff",lineHeight:1.45}}>{curCard.front}</div>
+                {canCtrl&&!gameState.flipped&&<div style={{fontSize:"0.72rem",color:"#2a2a2a",marginTop:"0.5rem",animation:"pulse 2s infinite"}}>👆 Klicken zum Aufdecken</div>}
+                {!canCtrl&&!gameState.flipped&&<div style={{fontSize:"0.72rem",color:"#2a2a2a"}}>Warte auf {curPlayer?.name}...</div>}
+              </div>
+              {/* Rückseite – Antwort */}
+              <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",transform:"rotateY(180deg)",background:"#0a0a0a",border:`2px solid ${col.badge}70`,borderRadius:"20px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"0.75rem",overflowY:"auto"}}>
+                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:"#22c55e",fontWeight:"bold",flexShrink:0}}>✓ ANTWORT</span>
+                <div style={{fontFamily:"'Courier New',monospace",fontSize:"0.85rem",color:"#ccc",lineHeight:"1.75",flex:1,overflowY:"auto",wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{curCard.back.slice(0,600)}{curCard.back.length>600?"…":""}</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Bewertungs-Buttons */}
+        {gameState?.flipped&&canCtrl&&(
+          <div style={{display:"flex",gap:"0.75rem",width:"100%"}}>
+            <button onClick={()=>doNext("unknown")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#130808",border:"2px solid #ef444450",color:"#ef4444",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
+              ✗ Nicht gewusst
+            </button>
+            <button onClick={()=>doNext("known")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#081308",border:"2px solid #22c55e50",color:"#22c55e",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
+              ✓ Gewusst!
+            </button>
+          </div>
+        )}
+        {gameState?.flipped&&!canCtrl&&(
+          <div style={{fontSize:"0.75rem",color:"#333",padding:"0.5rem",textAlign:"center"}}>Warte auf Bewertung von {curPlayer?.name}...</div>
+        )}
+        <button onClick={leaveRoom} style={{fontSize:"0.7rem",color:"#2a2a2a",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"0.5rem"}}>Raum verlassen</button>
+      </div>
+    );
+  }
+
+  if(phase==="done"){
+    const res=gameState?.results||{};
+    const known=Object.values(res).filter(r=>r==="known").length;
+    const total=Object.keys(res).length;
+    const pct=total>0?Math.round(known/total*100):0;
+    const c=pct>=70?"#22c55e":pct>=40?"#eab308":"#ef4444";
+    return(
+      <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{width:"100%",maxWidth:"460px",textAlign:"center",display:"flex",flexDirection:"column",gap:"1.25rem",alignItems:"center"}}>
+          <div style={{fontSize:"4rem"}}>{pct>=70?"🎉":pct>=40?"📚":"💪"}</div>
+          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.35rem",fontWeight:"bold",color:"#fff"}}>Runde abgeschlossen!</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"0.75rem",width:"100%"}}>
+            {[{l:"Karten",v:total,c:"#3b82f6"},{l:"Gewusst",v:known,c:"#22c55e"},{l:"Score",v:`${pct}%`,c}].map(k=>(
+              <div key={k.l} style={{background:"#0f0f0f",border:`1px solid ${k.c}20`,borderRadius:"12px",padding:"1rem"}}>
+                <div style={{fontSize:"1.5rem",fontWeight:"bold",fontFamily:"'Courier New',monospace",color:k.c}}>{k.v}</div>
+                <div style={{fontSize:"0.65rem",color:"#555",marginTop:"0.2rem"}}>{k.l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:"0.75rem",width:"100%"}}>
+            <button onClick={leaveRoom} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"none",border:"1px solid #2a2a2a",color:"#888",fontFamily:"inherit",cursor:"pointer",fontSize:"0.85rem"}}>← Zurück</button>
+            {isHost&&<button onClick={startGame} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#f97316",border:"none",color:"#fff",fontFamily:"inherit",fontWeight:"bold",cursor:"pointer",fontSize:"0.85rem"}}>🔄 Neue Runde</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 const PASSWORT = "fisi2026";
 
@@ -1387,6 +1651,7 @@ export default function App() {
           <button onClick={()=>setPage("pruefung")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="pruefung"?"#eab308":"transparent",color:page==="pruefung"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="pruefung"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="pruefung" size={14}/>Prüfung erstellen</button>
           <button onClick={()=>setPage("abfrage")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="abfrage"?"#a855f7":"transparent",color:page==="abfrage"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="abfrage"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="quiz" size={14}/>Abfrage-Modus</button>
           <button onClick={()=>setPage("statistik")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="statistik"?"#22c55e":"transparent",color:page==="statistik"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="statistik"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="chart" size={14}/>Statistik</button>
+          <button onClick={()=>setPage("karteikarten")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="karteikarten"?"#f97316":"transparent",color:page==="karteikarten"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="karteikarten"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="card" size={14}/>Karteikarten</button>
           <div style={{width:"1px",height:"20px",background:"#1e1e1e",margin:"0 0.2rem"}}/>
           <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem 0.8rem",color:"#555",cursor:"pointer",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="refresh" size={13}/>Sync</button>
           {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:"0.45rem",background:"#fff",color:"#000",border:"none",borderRadius:"8px",padding:"0.5rem 1rem",fontSize:"0.82rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}><Icon name="plus" size={14}/>Hinzufügen</button>}
@@ -1451,6 +1716,7 @@ export default function App() {
                 <button onClick={()=>setPage("pruefung")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="pruefung" size={12}/><span>Prüfung erstellen</span></button>
                 <button onClick={()=>setPage("abfrage")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="quiz" size={12}/><span>Abfrage-Modus</span></button>
                 <button onClick={()=>setPage("statistik")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="chart" size={12}/><span>Statistik</span></button>
+                <button onClick={()=>setPage("karteikarten")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="card" size={12}/><span>Karteikarten</span></button>
               </SideSection>
               <div style={{marginTop:"auto",padding:"0.75rem 0.5rem",borderTop:"1px solid #0f0f0f"}}>
                 <div style={{fontSize:"0.58rem",color:"#2a2a2a",letterSpacing:"0.15em",marginBottom:"0.5rem"}}>STATISTIK</div>
@@ -1468,6 +1734,7 @@ export default function App() {
         {page==="pruefung" && <PruefungsGenerator items={items}/>}
         {page==="abfrage" && <AbfrageModus items={items}/>}
         {page==="statistik" && <StatistikPage items={items} fortschrittData={fortschrittData}/>}
+        {page==="karteikarten" && <KarteikartenModus items={items}/>}
 
         {page==="lernportal" && (
           <div style={{flex:1,padding:isMobile?"0.75rem":"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
@@ -1542,6 +1809,7 @@ export default function App() {
             {id:"pruefung",icon:"pruefung",label:"Prüfung",color:"#eab308"},
             {id:"abfrage",icon:"quiz",label:"Abfrage",color:"#a855f7"},
             {id:"statistik",icon:"chart",label:"Statistik",color:"#22c55e"},
+            {id:"karteikarten",icon:"card",label:"Karten",color:"#f97316"},
           ].map(tab=>(
             <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
               <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent"}}><Icon name={tab.icon} size={18}/></div>
