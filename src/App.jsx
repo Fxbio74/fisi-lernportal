@@ -1263,144 +1263,175 @@ function KarteikartenModus({ items }) {
   const channelRef = useRef(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [readyToFlip, setReadyToFlip] = useState(false);
 
   const rawItems = items.filter(i => i.type==="text" && i.content);
-const [cards, setCards] = useState([]);
-const [generatingCards, setGeneratingCards] = useState(false);
-
-useEffect(() => {
-  if (rawItems.length === 0) return;
-  const cached = localStorage.getItem("fisi_karten_v2");
-  if (cached) { try { setCards(JSON.parse(cached)); return; } catch(e) {} }
-  generateCards();
-}, [items.length]);
-
-const generateCards = async () => {
-  if (rawItems.length === 0) return;
-  setGeneratingCards(true);
-  const shuffled = [...rawItems].sort(() => Math.random() - 0.5).slice(0, 30);
-  const context = shuffled.map(i =>
-    `Thema: "${i.title}" (${i.category})\nInhalt: ${i.content.substring(0, 400)}`
-  ).join("\n\n---\n\n");
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system: "Du bist FISI IHK-Coach. Erstelle Karteikarten-Fragen auf Deutsch. Antworte NUR mit JSON-Array, keine Backticks.",
-        messages: [{ role: "user", content: `Erstelle ${shuffled.length} Karteikarten. Kurze Frage vorne, prägnante Antwort (2-4 Sätze) hinten. IHK-typisch.\n\n${context}\n\nNUR JSON: [{"front":"Frage?","back":"Antwort","category":"Kategorie"}]` }]
-      })
-    });
-    const data = await res.json();
-    const text = data.content?.[0]?.text || "[]";
-    const parsed = JSON.parse(text.replace(/\`\`\`json/g,"").replace(/\`\`\`/g,"").trim());
-    const withIds = parsed.map((c, i) => ({ ...c, id: `ki_${i}` }));
-    setCards(withIds);
-    localStorage.setItem("fisi_karten_v2", JSON.stringify(withIds));
-  } catch(e) {
-    setCards(shuffled.map(item => ({
-      id: item.id,
-      front: `Was versteht man unter "${item.title}"?`,
-      back: item.content.substring(0, 300),
-      category: item.category
-    })));
-  }
-  setGeneratingCards(false);
-};
+  const [cards, setCards] = useState([]);
+  const [generatingCards, setGeneratingCards] = useState(false);
   const PCOLORS = ["#3b82f6","#a855f7","#f59e0b"];
 
+  useEffect(() => {
+    if (rawItems.length === 0) return;
+    const cached = localStorage.getItem("fisi_karten_v2");
+    if (cached) { try { setCards(JSON.parse(cached)); return; } catch(e) {} }
+    generateCards();
+  }, [items.length]);
+
+  const generateCards = async () => {
+    if (rawItems.length === 0) return;
+    setGeneratingCards(true);
+    const shuffled = [...rawItems].sort(() => Math.random() - 0.5).slice(0, 30);
+    const context = shuffled.map(i =>
+      `Thema: "${i.title}" (${i.category})\nInhalt: ${i.content.substring(0, 400)}`
+    ).join("\n\n---\n\n");
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: "Du bist FISI IHK-Coach. Erstelle Karteikarten-Fragen auf Deutsch. Antworte NUR mit JSON-Array, keine Backticks, kein Markdown.",
+          messages: [{ role: "user", content: `Erstelle genau ${shuffled.length} Karteikarten (eine pro Thema).\nVorderseite: kurze klare IHK-Pruefungsfrage.\nRueckseite: praegnante Antwort, max 3-4 Saetze.\n\n${context}\n\nNUR JSON: [{"front":"Die Frage?","back":"Die Antwort in 2-4 Saetzen.","category":"Kategoriename"}]` }]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || "[]";
+      const parsed = JSON.parse(text.replace(/\`\`\`json/g,"").replace(/\`\`\`/g,"").trim());
+      const withIds = parsed.map((c, i) => ({ ...c, id: `ki_${i}` }));
+      setCards(withIds);
+      localStorage.setItem("fisi_karten_v2", JSON.stringify(withIds));
+    } catch(e) {
+      const fallback = shuffled.map(item => ({
+        id: item.id,
+        front: `Was versteht man unter "${item.title}"?`,
+        back: item.content.substring(0, 300),
+        category: item.category
+      }));
+      setCards(fallback);
+      localStorage.setItem("fisi_karten_v2", JSON.stringify(fallback));
+    }
+    setGeneratingCards(false);
+  };
+
   const genCode = () => {
-    const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    return Array.from({length:4},()=>c[Math.floor(Math.random()*c.length)]).join("");
+    const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    return Array.from({length:4}, () => c[Math.floor(Math.random()*c.length)]).join("");
   };
 
   const leaveRoom = () => {
     channelRef.current?.unsubscribe();
-    channelRef.current=null;
+    channelRef.current = null;
     setPhase("setup"); setPlayers([]); setGameState(null);
-    setIsHost(false); setRoomCode(""); setError("");
+    setIsHost(false); setRoomCode(""); setError(""); setReadyToFlip(false);
   };
-  
+
   const connectRoom = (code, host) => {
-    const ch = supabase.channel(`fisi-karten-v2-${code}`,{config:{presence:{key:myId}}});
-    ch.on("presence",{event:"sync"},()=>{
-      const raw=ch.presenceState();
-      const list=Object.entries(raw)
-        .flatMap(([id,arr])=>arr.map(d=>({id,name:d.name,isHost:d.isHost,joinedAt:d.joinedAt})))
-        .sort((a,b)=>a.joinedAt-b.joinedAt).slice(0,3);
+    const ch = supabase.channel(`fisi-karten-v3-${code}`, {config:{presence:{key:myId}}});
+    ch.on("presence", {event:"sync"}, () => {
+      const raw = ch.presenceState();
+      const list = Object.entries(raw)
+        .flatMap(([id, arr]) => arr.map(d => ({id, name:d.name, isHost:d.isHost, joinedAt:d.joinedAt})))
+        .sort((a,b) => a.joinedAt - b.joinedAt).slice(0,3);
       setPlayers(list);
     });
-    ch.on("broadcast",{event:"gsync"},({payload})=>{
-      if(payload.gs!==undefined) setGameState(payload.gs);
-      if(payload.ph) setPhase(payload.ph);
+    ch.on("broadcast", {event:"gsync"}, ({payload}) => {
+      if (payload.gs !== undefined) setGameState(payload.gs);
+      if (payload.ph) setPhase(payload.ph);
+      if (payload.rtf !== undefined) setReadyToFlip(payload.rtf);
     });
-    ch.subscribe(async status=>{
-      if(status==="SUBSCRIBED"){
-        await ch.track({name:myName.trim(),isHost:host,joinedAt:Date.now()});
+    ch.subscribe(async status => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({name:myName.trim(), isHost:host, joinedAt:Date.now()});
         setPhase("lobby"); setError("");
-      } else if(status==="CHANNEL_ERROR"){
+      } else if (status === "CHANNEL_ERROR") {
         setError("Verbindungsfehler. Bitte erneut versuchen.");
       }
     });
-    channelRef.current=ch;
+    channelRef.current = ch;
   };
 
-  const bcast=(gs,ph)=>channelRef.current?.send({type:"broadcast",event:"gsync",payload:{gs,ph}});
+  const bcast = (gs, ph, rtf) => channelRef.current?.send({
+    type: "broadcast", event: "gsync",
+    payload: { gs, ph, ...(rtf !== undefined ? {rtf} : {}) }
+  });
 
-  const createRoom=()=>{
-    if(!myName.trim()) return setError("Bitte Namen eingeben!");
-    const code=genCode(); setRoomCode(code); setIsHost(true); connectRoom(code,true);
+  const createRoom = () => {
+    if (!myName.trim()) return setError("Bitte Namen eingeben!");
+    const code = genCode(); setRoomCode(code); setIsHost(true); connectRoom(code, true);
   };
-  const joinRoom=()=>{
-    if(!myName.trim()) return setError("Bitte Namen eingeben!");
-    const code=inputCode.trim().toUpperCase();
-    if(code.length!==4) return setError("Bitte 4-stelligen Code eingeben!");
-    setRoomCode(code); setIsHost(false); connectRoom(code,false);
+  const joinRoom = () => {
+    if (!myName.trim()) return setError("Bitte Namen eingeben!");
+    const code = inputCode.trim().toUpperCase();
+    if (code.length !== 4) return setError("Bitte 4-stelligen Code eingeben!");
+    setRoomCode(code); setIsHost(false); connectRoom(code, false);
   };
-  const startGame=()=>{
-    if(cards.length===0) return setError("Keine Einträge vorhanden! Füge zuerst Texte hinzu.");
-    const num=Math.min(cards.length,20);
-    const order=[...Array(cards.length).keys()].sort(()=>Math.random()-0.5).slice(0,num);
-    const gs={order,idx:0,pidx:0,flipped:false,results:{}};
-    setGameState(gs); setPhase("game"); bcast(gs,"game");
+
+  const startGame = () => {
+    if (cards.length === 0) return setError("Keine Karten! Warte bis KI fertig ist.");
+    const num = Math.min(cards.length, 20);
+    const order = [...Array(cards.length).keys()].sort(() => Math.random()-0.5).slice(0,num);
+    const gs = {order, idx:0, pidx:0, flipped:false, results:{}};
+    setGameState(gs); setPhase("game"); setReadyToFlip(false);
+    bcast(gs, "game", false);
   };
-  const doFlip=()=>{
-    const gs={...gameState,flipped:true}; setGameState(gs); bcast(gs,"game");
+
+  const doFlip = () => {
+    const gs = {...gameState, flipped:true};
+    setGameState(gs); setReadyToFlip(false);
+    bcast(gs, "game", false);
   };
-  const doNext=result=>{
-    const gs={...gameState,results:{...gameState.results,[gameState.order[gameState.idx]]:result}};
-    const next=gs.idx+1;
-    if(next>=gs.order.length){
-      gs.idx=next; setGameState(gs); setPhase("done"); bcast(gs,"done");
+
+  const doReady = () => {
+    setReadyToFlip(true);
+    bcast(gameState, "game", true);
+  };
+
+  const doNext = result => {
+    const gs = {...gameState, results:{...gameState.results, [gameState.order[gameState.idx]]:result}};
+    const next = gs.idx + 1;
+    if (next >= gs.order.length) {
+      gs.idx = next; setGameState(gs); setPhase("done"); setReadyToFlip(false);
+      bcast(gs, "done", false);
     } else {
-      gs.idx=next; gs.pidx=(gs.pidx+1)%Math.max(players.length,1); gs.flipped=false;
-      setGameState(gs); bcast(gs,"game");
+      gs.idx = next; gs.pidx = (gs.pidx+1) % Math.max(players.length,1); gs.flipped = false;
+      setGameState(gs); setReadyToFlip(false);
+      bcast(gs, "game", false);
     }
   };
 
-  const myPidx=players.findIndex(p=>p.id===myId);
-  const isMyTurn=gameState?myPidx===gameState.pidx:false;
-  const canCtrl=isMyTurn;
-  const curCard=gameState&&gameState.idx<gameState.order.length?cards[gameState.order[gameState.idx]]:null;
-  const curPlayer=gameState?players[gameState.pidx]:null;
-  const inpS={width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"9px",padding:"0.8rem 1rem",color:"#fff",fontSize:"0.95rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const myPidx = players.findIndex(p => p.id === myId);
+  const isSolo = players.length <= 1;
+  // Wer liest vor (dran)
+  const isReading = gameState ? myPidx === gameState.pidx : false;
+  // Wer antwortet (naechster)
+  const isAnswering = gameState && !isSolo
+    ? myPidx === (gameState.pidx + 1) % players.length
+    : false;
+
+  const curCard = gameState && gameState.idx < gameState.order.length
+    ? cards[gameState.order[gameState.idx]] : null;
+  const curPlayer = gameState ? players[gameState.pidx] : null;
+  const answerPlayer = gameState && !isSolo
+    ? players[(gameState.pidx + 1) % players.length] : null;
+
+  const inpS = {width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"9px",padding:"0.8rem 1rem",color:"#fff",fontSize:"0.95rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
 
   if (generatingCards) return (
-  <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",gap:"1.5rem"}}>
-    <div style={{fontSize:"3rem"}}>🃏</div>
-    <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.1rem",color:"#fff"}}>KI generiert Karteikarten...</div>
-    <div style={{fontSize:"0.82rem",color:"#555"}}>Echte IHK-Prüfungsfragen werden erstellt</div>
-    <div style={{display:"flex",gap:"8px"}}>
-      {[0,1,2,3,4].map(n=><div key={n} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#f97316",animation:`bounce 1.2s infinite ${n*0.15}s`}}/>)}
+    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",gap:"1.5rem"}}>
+      <div style={{fontSize:"3rem"}}>🃏</div>
+      <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.1rem",color:"#fff"}}>KI generiert Karteikarten...</div>
+      <div style={{fontSize:"0.82rem",color:"#555"}}>Echte IHK-Pruefungsfragen werden erstellt</div>
+      <div style={{display:"flex",gap:"8px"}}>
+        {[0,1,2,3,4].map(n=><div key={n} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#f97316",animation:`bounce 1.2s infinite ${n*0.15}s`}}/>)}
+      </div>
     </div>
-  </div>
-);
-  if(phase==="setup") return(
+  );
+
+  if (phase === "setup") return (
     <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{width:"100%",maxWidth:"420px"}}>
         <div style={{textAlign:"center",marginBottom:"2rem"}}>
           <div style={{fontSize:"3rem",marginBottom:"0.5rem"}}>🃏</div>
           <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.4rem",fontWeight:"bold",color:"#fff"}}>Karteikarten</div>
-          <div style={{fontSize:"0.78rem",color:"#555",marginTop:"0.3rem"}}>Gemeinsam lernen · bis 3 Personen · Live-Synchronisierung</div>
+          <div style={{fontSize:"0.78rem",color:"#555",marginTop:"0.3rem"}}>Gemeinsam lernen · bis 3 Personen · Live</div>
         </div>
         <div style={{background:"#0f0f0f",border:"1px solid #1e1e1e",borderRadius:"16px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"1rem"}}>
           <div>
@@ -1421,12 +1452,12 @@ const generateCards = async () => {
             </button>
           </div>
         </div>
-        <div style={{textAlign:"center",marginTop:"1rem",fontSize:"0.7rem",color:"#2a2a2a"}}>{cards.length} Karten aus {items.filter(i=>i.type==="text").length} Einträgen</div>
+        <div style={{textAlign:"center",marginTop:"1rem",fontSize:"0.7rem",color:"#2a2a2a"}}>{cards.length} Karten verfuegbar</div>
       </div>
     </div>
   );
 
-  if(phase==="lobby") return(
+  if (phase === "lobby") return (
     <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{width:"100%",maxWidth:"420px",display:"flex",flexDirection:"column",gap:"1.25rem"}}>
         <div style={{textAlign:"center"}}>
@@ -1456,13 +1487,20 @@ const generateCards = async () => {
             </div>
           ))}
         </div>
+        <div style={{background:"#0a1a2e",border:"1px solid #1a3a5a",borderRadius:"12px",padding:"1rem",fontSize:"0.78rem",color:"#60a5fa",lineHeight:"1.6"}}>
+          <div style={{fontWeight:"bold",marginBottom:"0.4rem"}}>💡 Spielablauf</div>
+          <div>1. Person A liest die Frage vor & deckt auf</div>
+          <div>2. Person B antwortet muendlich</div>
+          <div>3. Person B drueckt "Fertig" wenn fertig</div>
+          <div>4. Person A bewertet: Gewusst oder Nicht gewusst</div>
+        </div>
         {error&&<div style={{fontSize:"0.78rem",color:"#ef4444",padding:"0.5rem 0.75rem",background:"#1a0a0a",borderRadius:"8px",border:"1px solid #ef444430"}}>{error}</div>}
         <div style={{display:"flex",gap:"0.75rem"}}>
           <button onClick={leaveRoom} style={{padding:"0.75rem 1rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>← Verlassen</button>
-          {isHost&&<button onClick={generateCards} style={{padding:"0.75rem 0.9rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.75rem"}}>🔄 Neue Fragen</button>}
+          {isHost&&<button onClick={generateCards} disabled={generatingCards} style={{padding:"0.75rem 0.9rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.75rem"}}>{generatingCards?"...":"🔄 Neue Fragen"}</button>}
           {isHost
             ?<button onClick={startGame} style={{flex:1,padding:"0.75rem",borderRadius:"10px",background:"#f97316",border:"none",color:"#fff",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit",fontSize:"0.88rem"}}>
-               {players.length<2?"Solo starten":"Spiel starten ("+players.length+" Spieler)"}
+               {players.length<2?"Solo starten":"Starten ("+players.length+" Spieler)"}
              </button>
             :<div style={{flex:1,padding:"0.75rem",borderRadius:"10px",background:"#0f0f0f",border:"1px solid #1e1e1e",color:"#444",fontSize:"0.82rem",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>Warte auf Host...</div>
           }
@@ -1471,13 +1509,15 @@ const generateCards = async () => {
     </div>
   );
 
-  if(phase==="game"){
-    const col=curCard?(CAT_COLORS[curCard.category]||CAT_COLORS["Sonstiges"]):CAT_COLORS["Sonstiges"];
-    const prog=gameState?`${Math.min(gameState.idx+1,gameState.order.length)}/${gameState.order.length}`:"–";
-    const pct=gameState?(gameState.idx/gameState.order.length*100):0;
-    return(
+  if (phase === "game") {
+    const col = curCard ? (CAT_COLORS[curCard.category]||CAT_COLORS["Sonstiges"]) : CAT_COLORS["Sonstiges"];
+    const prog = gameState ? `${Math.min(gameState.idx+1, gameState.order.length)}/${gameState.order.length}` : "–";
+    const pct = gameState ? (gameState.idx/gameState.order.length*100) : 0;
+
+    return (
       <div style={{flex:1,overflowY:"auto",padding:"1.5rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"1rem",maxWidth:"650px",margin:"0 auto",width:"100%"}}>
-        {/* Spieler-Pills */}
+
+        {/* Spieler Pills */}
         <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",justifyContent:"center",width:"100%",alignItems:"center"}}>
           {players.map((p,i)=>(
             <div key={p.id} style={{display:"flex",alignItems:"center",gap:"0.35rem",padding:"0.3rem 0.65rem",borderRadius:"20px",background:gameState&&i===gameState.pidx?`${PCOLORS[i]||"#666"}18`:"#0f0f0f",border:`1px solid ${gameState&&i===gameState.pidx?(PCOLORS[i]||"#666"):"#1e1e1e"}`,transition:"all 0.3s"}}>
@@ -1487,61 +1527,137 @@ const generateCards = async () => {
           ))}
           <span style={{fontSize:"0.7rem",color:"#444",fontFamily:"'Courier New',monospace",marginLeft:"auto"}}>{prog}</span>
         </div>
-        {/* Progress bar */}
+
+        {/* Progress */}
         <div style={{width:"100%",background:"#0f0f0f",borderRadius:"4px",height:"3px",overflow:"hidden"}}>
           <div style={{height:"100%",background:"#f97316",width:`${pct}%`,transition:"width 0.4s",borderRadius:"4px"}}/>
         </div>
-        {/* Turn indicator */}
-        {curPlayer&&(
-          <div style={{padding:"0.45rem 1.1rem",borderRadius:"20px",background:isMyTurn?"#f9731615":"#0f0f0f",border:`1px solid ${isMyTurn?"#f97316":"#1e1e1e"}`,fontSize:"0.8rem",color:isMyTurn?"#f97316":"#666",fontWeight:"bold",transition:"all 0.3s"}}>
-            {isMyTurn?"✋ Du bist dran!":"🎯 "+curPlayer.name+" ist dran"}
-          </div>
-        )}
-        {/* Flip Card */}
-        {curCard&&(
-          <div style={{width:"100%",height:"320px",perspective:"1200px",cursor:!gameState.flipped&&canCtrl?"pointer":"default"}} onClick={!gameState.flipped&&isMyTurn?doFlip:undefined}>
-            <div style={{width:"100%",height:"100%",position:"relative",transformStyle:"preserve-3d",transition:"transform 0.65s cubic-bezier(.4,0,.2,1)",transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
+
+        {/* Status */}
+        <div style={{padding:"0.45rem 1.1rem",borderRadius:"20px",border:"1px solid #1e1e1e",fontSize:"0.8rem",fontWeight:"bold",transition:"all 0.3s",
+          background:isSolo?"#f9731615":isReading?"#f9731615":isAnswering?"#3b82f615":"#0f0f0f",
+          color:isSolo?"#f97316":isReading?"#f97316":isAnswering?"#3b82f6":"#666"}}>
+          {isSolo?"🃏 Klicke auf die Karte um zu lesen, dann aufzudecken"
+           :isReading?`📖 Du liest vor → ${answerPlayer?.name||"?"} antwortet muendlich`
+           :isAnswering?"🎤 Antworte muendlich – druecke dann Fertig"
+           :`👀 ${curPlayer?.name} liest vor`}
+        </div>
+
+        {/* Karteikarte */}
+        {curCard && (
+          <div style={{width:"100%",minHeight:"300px",perspective:"1200px",
+            cursor:(!gameState.flipped&&(isReading||isSolo))?"pointer":"default"}}
+            onClick={(!gameState.flipped&&(isReading||isSolo))?doFlip:undefined}>
+            <div style={{width:"100%",minHeight:"300px",position:"relative",transformStyle:"preserve-3d",
+              transition:"transform 0.65s cubic-bezier(.4,0,.2,1)",
+              transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
+
               {/* Vorderseite – Frage */}
-              <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",background:`linear-gradient(135deg,${col.bg}ee,#0a0a0a)`,border:`2px solid ${col.badge}40`,borderRadius:"20px",padding:"2rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",gap:"1rem"}}>
-                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:col.badge,fontWeight:"bold",background:`${col.badge}12`,padding:"0.2rem 0.6rem",borderRadius:"4px"}}>{(curCard.category||"").toUpperCase()}</span>
-                <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.15rem",fontWeight:"bold",color:"#fff",lineHeight:1.45}}>{curCard.front}</div>
-                {canCtrl&&!gameState.flipped&&<div style={{fontSize:"0.72rem",color:"#2a2a2a",marginTop:"0.5rem",animation:"pulse 2s infinite"}}>👆 Klicken zum Aufdecken</div>}
-                {!canCtrl&&!gameState.flipped&&<div style={{fontSize:"0.72rem",color:"#2a2a2a"}}>Warte auf {curPlayer?.name}...</div>}
+              <div style={{position:"absolute",inset:0,minHeight:"300px",backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
+                background:`linear-gradient(135deg,${col.bg}ee,#0a0a0a)`,border:`2px solid ${col.badge}40`,
+                borderRadius:"20px",padding:"2rem",display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",textAlign:"center",gap:"1rem"}}>
+                <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:col.badge,fontWeight:"bold",
+                  background:`${col.badge}12`,padding:"0.2rem 0.6rem",borderRadius:"4px"}}>
+                  {(curCard.category||"").toUpperCase()}
+                </span>
+                <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.2rem",fontWeight:"bold",color:"#fff",lineHeight:1.5}}>
+                  {curCard.front}
+                </div>
+                {(isReading||isSolo)&&!gameState.flipped&&(
+                  <div style={{fontSize:"0.72rem",color:"#333",marginTop:"0.5rem",animation:"pulse 2s infinite"}}>
+                    👆 Klicken zum Aufdecken
+                  </div>
+                )}
+                {!isReading&&!isSolo&&!gameState.flipped&&(
+                  <div style={{fontSize:"0.72rem",color:"#333"}}>
+                    Warte auf {curPlayer?.name}...
+                  </div>
+                )}
               </div>
-              {/* Rückseite – Antwort */}
-              <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",transform:"rotateY(180deg)",background:"#0a0a0a",border:`2px solid ${col.badge}70`,borderRadius:"20px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"0.75rem",overflowY:"auto"}}>
+
+              {/* Rueckseite – Antwort */}
+              <div style={{position:"absolute",inset:0,minHeight:"300px",backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",
+                transform:"rotateY(180deg)",background:"#0a0a0a",border:`2px solid ${col.badge}70`,
+                borderRadius:"20px",padding:"1.5rem",display:"flex",flexDirection:"column",gap:"0.75rem",overflowY:"auto"}}>
                 <span style={{fontSize:"0.6rem",letterSpacing:"0.2em",color:"#22c55e",fontWeight:"bold",flexShrink:0}}>✓ ANTWORT</span>
-                <div style={{fontFamily:"'Courier New',monospace",fontSize:"0.85rem",color:"#ccc",lineHeight:"1.75",flex:1,overflowY:"auto",wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{curCard.back.slice(0,600)}{curCard.back.length>600?"…":""}</div>
+                <div style={{fontFamily:"'Courier New',monospace",fontSize:"0.88rem",color:"#ccc",lineHeight:"1.75",
+                  flex:1,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>
+                  {curCard.back}
+                </div>
               </div>
             </div>
           </div>
         )}
-        {/* Bewertungs-Buttons */}
-        {gameState?.flipped&&isMyTurn&&(
-          <div style={{display:"flex",gap:"0.75rem",width:"100%"}}>
-            <button onClick={()=>doNext("unknown")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#130808",border:"2px solid #ef444450",color:"#ef4444",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
-              ✗ Nicht gewusst
-            </button>
-            <button onClick={()=>doNext("known")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#081308",border:"2px solid #22c55e50",color:"#22c55e",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
-              ✓ Gewusst!
-            </button>
+
+        {/* Buttons nach dem Aufdecken */}
+        {gameState?.flipped && (
+          <div style={{width:"100%",display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+
+            {/* Antwortender: Fertig-Button */}
+            {!isSolo && isAnswering && !readyToFlip && (
+              <button onClick={doReady} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",
+                background:"#3b82f6",border:"none",color:"#fff",
+                fontFamily:"inherit",fontWeight:"bold",fontSize:"0.95rem",cursor:"pointer"}}>
+                ✋ Fertig – ich habe geantwortet
+              </button>
+            )}
+
+            {/* Antwortender: wartet auf Bewertung */}
+            {!isSolo && isAnswering && readyToFlip && (
+              <div style={{padding:"0.9rem",borderRadius:"12px",background:"#0f0f0f",
+                border:"1px solid #1e1e1e",color:"#555",fontSize:"0.85rem",
+                textAlign:"center"}}>
+                Warte auf Bewertung von {curPlayer?.name}...
+              </div>
+            )}
+
+            {/* Vorleser: Bewertungs-Buttons (nur wenn Antwortender fertig oder Solo) */}
+            {(isSolo || (isReading && (readyToFlip || isSolo))) && (
+              <div style={{display:"flex",gap:"0.75rem"}}>
+                <button onClick={()=>doNext("unknown")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",
+                  background:"#130808",border:"2px solid #ef444450",color:"#ef4444",
+                  fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
+                  ✗ Nicht gewusst
+                </button>
+                <button onClick={()=>doNext("known")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",
+                  background:"#081308",border:"2px solid #22c55e50",color:"#22c55e",
+                  fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
+                  ✓ Gewusst!
+                </button>
+              </div>
+            )}
+
+            {/* Vorleser wartet noch */}
+            {!isSolo && isReading && !readyToFlip && (
+              <div style={{padding:"0.75rem",borderRadius:"12px",background:"#0f0f0f",
+                border:"1px solid #1e1e1e",color:"#555",fontSize:"0.82rem",textAlign:"center"}}>
+                Warte bis {answerPlayer?.name} auf "Fertig" drueckt...
+              </div>
+            )}
+
+            {/* Zuschauer */}
+            {!isSolo && !isReading && !isAnswering && (
+              <div style={{padding:"0.75rem",borderRadius:"12px",background:"#0f0f0f",
+                border:"1px solid #1e1e1e",color:"#444",fontSize:"0.82rem",textAlign:"center"}}>
+                Zuschauer 👀
+              </div>
+            )}
           </div>
         )}
-        {gameState?.flipped&&!isMyTurn&&(
-          <div style={{fontSize:"0.75rem",color:"#333",padding:"0.5rem",textAlign:"center"}}>Warte auf Bewertung von {curPlayer?.name}...</div>
-        )}
+
         <button onClick={leaveRoom} style={{fontSize:"0.7rem",color:"#2a2a2a",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"0.5rem"}}>Raum verlassen</button>
       </div>
     );
   }
 
-  if(phase==="done"){
-    const res=gameState?.results||{};
-    const known=Object.values(res).filter(r=>r==="known").length;
-    const total=Object.keys(res).length;
-    const pct=total>0?Math.round(known/total*100):0;
-    const c=pct>=70?"#22c55e":pct>=40?"#eab308":"#ef4444";
-    return(
+  if (phase === "done") {
+    const res = gameState?.results || {};
+    const known = Object.values(res).filter(r=>r==="known").length;
+    const total = Object.keys(res).length;
+    const pct = total > 0 ? Math.round(known/total*100) : 0;
+    const c = pct>=70?"#22c55e":pct>=40?"#eab308":"#ef4444";
+    return (
       <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
         <div style={{width:"100%",maxWidth:"460px",textAlign:"center",display:"flex",flexDirection:"column",gap:"1.25rem",alignItems:"center"}}>
           <div style={{fontSize:"4rem"}}>{pct>=70?"🎉":pct>=40?"📚":"💪"}</div>
@@ -1555,7 +1671,7 @@ const generateCards = async () => {
             ))}
           </div>
           <div style={{display:"flex",gap:"0.75rem",width:"100%"}}>
-            <button onClick={leaveRoom} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"none",border:"1px solid #2a2a2a",color:"#888",fontFamily:"inherit",cursor:"pointer",fontSize:"0.85rem"}}>← Zurück</button>
+            <button onClick={leaveRoom} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"none",border:"1px solid #2a2a2a",color:"#888",fontFamily:"inherit",cursor:"pointer",fontSize:"0.85rem"}}>← Zurueck</button>
             {isHost&&<button onClick={startGame} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#f97316",border:"none",color:"#fff",fontFamily:"inherit",fontWeight:"bold",cursor:"pointer",fontSize:"0.85rem"}}>🔄 Neue Runde</button>}
           </div>
         </div>
