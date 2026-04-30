@@ -1264,8 +1264,48 @@ function KarteikartenModus({ items }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const cards = items.filter(i => i.type==="text" && i.content)
-    .map(i => ({id:i.id, front:i.title, back:i.content, category:i.category}));
+  const rawItems = items.filter(i => i.type==="text" && i.content);
+const [cards, setCards] = useState([]);
+const [generatingCards, setGeneratingCards] = useState(false);
+
+useEffect(() => {
+  if (rawItems.length === 0) return;
+  const cached = localStorage.getItem("fisi_karten_v2");
+  if (cached) { try { setCards(JSON.parse(cached)); return; } catch(e) {} }
+  generateCards();
+}, [items.length]);
+
+const generateCards = async () => {
+  if (rawItems.length === 0) return;
+  setGeneratingCards(true);
+  const shuffled = [...rawItems].sort(() => Math.random() - 0.5).slice(0, 30);
+  const context = shuffled.map(i =>
+    `Thema: "${i.title}" (${i.category})\nInhalt: ${i.content.substring(0, 400)}`
+  ).join("\n\n---\n\n");
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system: "Du bist FISI IHK-Coach. Erstelle Karteikarten-Fragen auf Deutsch. Antworte NUR mit JSON-Array, keine Backticks.",
+        messages: [{ role: "user", content: `Erstelle ${shuffled.length} Karteikarten. Kurze Frage vorne, prägnante Antwort (2-4 Sätze) hinten. IHK-typisch.\n\n${context}\n\nNUR JSON: [{"front":"Frage?","back":"Antwort","category":"Kategorie"}]` }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.[0]?.text || "[]";
+    const parsed = JSON.parse(text.replace(/\`\`\`json/g,"").replace(/\`\`\`/g,"").trim());
+    const withIds = parsed.map((c, i) => ({ ...c, id: `ki_${i}` }));
+    setCards(withIds);
+    localStorage.setItem("fisi_karten_v2", JSON.stringify(withIds));
+  } catch(e) {
+    setCards(shuffled.map(item => ({
+      id: item.id,
+      front: `Was versteht man unter "${item.title}"?`,
+      back: item.content.substring(0, 300),
+      category: item.category
+    })));
+  }
+  setGeneratingCards(false);
+};
   const PCOLORS = ["#3b82f6","#a855f7","#f59e0b"];
 
   const genCode = () => {
@@ -1279,7 +1319,7 @@ function KarteikartenModus({ items }) {
     setPhase("setup"); setPlayers([]); setGameState(null);
     setIsHost(false); setRoomCode(""); setError("");
   };
-
+  
   const connectRoom = (code, host) => {
     const ch = supabase.channel(`fisi-karten-v2-${code}`,{config:{presence:{key:myId}}});
     ch.on("presence",{event:"sync"},()=>{
@@ -1339,11 +1379,21 @@ function KarteikartenModus({ items }) {
 
   const myPidx=players.findIndex(p=>p.id===myId);
   const isMyTurn=gameState?myPidx===gameState.pidx:false;
-  const canCtrl=isMyTurn||isHost;
+  const canCtrl=isMyTurn;
   const curCard=gameState&&gameState.idx<gameState.order.length?cards[gameState.order[gameState.idx]]:null;
   const curPlayer=gameState?players[gameState.pidx]:null;
   const inpS={width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:"9px",padding:"0.8rem 1rem",color:"#fff",fontSize:"0.95rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
 
+  if (generatingCards) return (
+  <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",gap:"1.5rem"}}>
+    <div style={{fontSize:"3rem"}}>🃏</div>
+    <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.1rem",color:"#fff"}}>KI generiert Karteikarten...</div>
+    <div style={{fontSize:"0.82rem",color:"#555"}}>Echte IHK-Prüfungsfragen werden erstellt</div>
+    <div style={{display:"flex",gap:"8px"}}>
+      {[0,1,2,3,4].map(n=><div key={n} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#f97316",animation:`bounce 1.2s infinite ${n*0.15}s`}}/>)}
+    </div>
+  </div>
+);
   if(phase==="setup") return(
     <div style={{flex:1,overflowY:"auto",padding:"2rem",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{width:"100%",maxWidth:"420px"}}>
@@ -1409,6 +1459,7 @@ function KarteikartenModus({ items }) {
         {error&&<div style={{fontSize:"0.78rem",color:"#ef4444",padding:"0.5rem 0.75rem",background:"#1a0a0a",borderRadius:"8px",border:"1px solid #ef444430"}}>{error}</div>}
         <div style={{display:"flex",gap:"0.75rem"}}>
           <button onClick={leaveRoom} style={{padding:"0.75rem 1rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>← Verlassen</button>
+          {isHost&&<button onClick={generateCards} style={{padding:"0.75rem 0.9rem",borderRadius:"10px",background:"none",border:"1px solid #2a2a2a",color:"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.75rem"}}>🔄 Neue Fragen</button>}
           {isHost
             ?<button onClick={startGame} style={{flex:1,padding:"0.75rem",borderRadius:"10px",background:"#f97316",border:"none",color:"#fff",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit",fontSize:"0.88rem"}}>
                {players.length<2?"Solo starten":"Spiel starten ("+players.length+" Spieler)"}
@@ -1448,7 +1499,7 @@ function KarteikartenModus({ items }) {
         )}
         {/* Flip Card */}
         {curCard&&(
-          <div style={{width:"100%",height:"320px",perspective:"1200px",cursor:!gameState.flipped&&canCtrl?"pointer":"default"}} onClick={!gameState.flipped&&canCtrl?doFlip:undefined}>
+          <div style={{width:"100%",height:"320px",perspective:"1200px",cursor:!gameState.flipped&&canCtrl?"pointer":"default"}} onClick={!gameState.flipped&&isMyTurn?doFlip:undefined}>
             <div style={{width:"100%",height:"100%",position:"relative",transformStyle:"preserve-3d",transition:"transform 0.65s cubic-bezier(.4,0,.2,1)",transform:gameState.flipped?"rotateY(180deg)":"rotateY(0deg)"}}>
               {/* Vorderseite – Frage */}
               <div style={{position:"absolute",inset:0,backfaceVisibility:"hidden",WebkitBackfaceVisibility:"hidden",background:`linear-gradient(135deg,${col.bg}ee,#0a0a0a)`,border:`2px solid ${col.badge}40`,borderRadius:"20px",padding:"2rem",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",gap:"1rem"}}>
@@ -1466,7 +1517,7 @@ function KarteikartenModus({ items }) {
           </div>
         )}
         {/* Bewertungs-Buttons */}
-        {gameState?.flipped&&canCtrl&&(
+        {gameState?.flipped&&isMyTurn&&(
           <div style={{display:"flex",gap:"0.75rem",width:"100%"}}>
             <button onClick={()=>doNext("unknown")} style={{flex:1,padding:"0.85rem",borderRadius:"12px",background:"#130808",border:"2px solid #ef444450",color:"#ef4444",fontFamily:"inherit",fontWeight:"bold",fontSize:"0.88rem",cursor:"pointer"}}>
               ✗ Nicht gewusst
@@ -1476,7 +1527,7 @@ function KarteikartenModus({ items }) {
             </button>
           </div>
         )}
-        {gameState?.flipped&&!canCtrl&&(
+        {gameState?.flipped&&!isMyTurn&&(
           <div style={{fontSize:"0.75rem",color:"#333",padding:"0.5rem",textAlign:"center"}}>Warte auf Bewertung von {curPlayer?.name}...</div>
         )}
         <button onClick={leaveRoom} style={{fontSize:"0.7rem",color:"#2a2a2a",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:"0.5rem"}}>Raum verlassen</button>
