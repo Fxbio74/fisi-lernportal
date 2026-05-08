@@ -1762,14 +1762,17 @@ function LoginScreen({ onLogin }) {
 }
 
 // ── Subnetting Trainer ────────────────────────────────────────────────────────
-  function SubnettingTrainer() {
+function SubnettingTrainer() {
   const [version,setVersion]=useState(null);
   const [questionCount,setQuestionCount]=useState(null);
   const [phase,setPhase]=useState("setup");
-  const [task,setTask]=useState(null);
+  const [allQuestions,setAllQuestions]=useState([]);
+  const [currentIndex,setCurrentIndex]=useState(0);
   const [answer,setAnswer]=useState("");
   const [checked,setChecked]=useState(false);
   const [isCorrect,setIsCorrect]=useState(false);
+  const [answerLoading,setAnswerLoading]=useState(false);
+  const [kiFeedback,setKiFeedback]=useState("");
   const [streak,setStreak]=useState(0);
   const [history,setHistory]=useState([]);
   const [kiLoading,setKiLoading]=useState(false);
@@ -1781,179 +1784,13 @@ function LoginScreen({ onLogin }) {
   const [historyOpen,setHistoryOpen]=useState(null);
   const inputRef=useRef();
 
-  // ── IPv4 helpers ──
-  function ipToInt(ip){ return ip.split(".").map(Number).reduce((a,b)=>((a<<8)|b)>>>0,0)>>>0; }
-  function intToIp(n){ return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join("."); }
-  function prefixToMaskInt(p){ return p===0?0:(0xFFFFFFFF<<(32-p))>>>0; }
-  function toBin8(n){ return n.toString(2).padStart(8,"0"); }
-  function randomPrivateIp(){
-    const o1=[10,172,192][Math.floor(Math.random()*3)];
-    const o2=o1===172?Math.floor(Math.random()*16)+16:Math.floor(Math.random()*253)+1;
-    return `${o1}.${o2}.${Math.floor(Math.random()*253)+1}.${Math.floor(Math.random()*253)+1}`;
-  }
-
-  function generateIPv4Task(){
-    const types=["netzadresse","broadcast","erste_ip","letzte_ip","hostbereich","hosts_nutzbar","adressen_gesamt","cidr_zu_maske","maske_zu_cidr","wildcard","gleiche_netz","anzahl_subnetze","netzbits_hostbits","binaer_oktet","netzklasse","privat_oeffentlich","apipa_loopback","punkt_zu_punkt"];
-    const type=types[Math.floor(Math.random()*types.length)];
-    const prefix=Math.floor(Math.random()*23)+8;
-    const maskInt=prefixToMaskInt(prefix);
-    const mask=intToIp(maskInt);
-    const wildcard=intToIp((~maskInt)>>>0);
-    const hostIp=randomPrivateIp();
-    const ipInt=ipToInt(hostIp);
-    const networkInt=(ipInt&maskInt)>>>0;
-    const broadcastInt=(networkInt|(~maskInt>>>0))>>>0;
-    const network=intToIp(networkInt);
-    const broadcast=intToIp(broadcastInt);
-    const hostCount=Math.pow(2,32-prefix)-2;
-    const totalAddr=Math.pow(2,32-prefix);
-    const firstUsable=intToIp(networkInt+1);
-    const lastUsable=intToIp(broadcastInt-1);
-    switch(type){
-      case "netzadresse": return{type,question:`IP-Adresse:   ${hostIp}\nPräfixlänge:  /${prefix}\n\nWie lautet die Netzadresse?`,answer:network,hint:`IP AND Subnetzmaske\nMaske: ${mask}`,extra:`${hostIp} AND ${mask} = ${network}`};
-      case "broadcast": return{type,question:`IP-Adresse:   ${hostIp}\nPräfixlänge:  /${prefix}\n\nWie lautet die Broadcast-Adresse?`,answer:broadcast,hint:`Netzadresse OR (NOT Maske)\nNetzadresse: ${network}`,extra:`Broadcast: ${broadcast}`};
-      case "erste_ip": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nErste nutzbare Host-IP?`,answer:firstUsable,hint:`Netzadresse + 1`,extra:`${network} + 1 = ${firstUsable}`};
-      case "letzte_ip": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nLetzte nutzbare Host-IP?`,answer:lastUsable,hint:`Broadcast − 1  (Broadcast: ${broadcast})`,extra:`${broadcast} − 1 = ${lastUsable}`};
-      case "hostbereich": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nNutzbarer Hostbereich?\n(Format: erste_IP - letzte_IP)`,answer:`${firstUsable} - ${lastUsable}`,hint:`Netzadresse+1 bis Broadcast−1`,extra:`${firstUsable} bis ${lastUsable}`};
-      case "hosts_nutzbar": return{type,question:`Präfixlänge:  /${prefix}\n\nWie viele nutzbare Hosts sind möglich?`,answer:String(hostCount),hint:`2^(32−${prefix}) − 2 = 2^${32-prefix} − 2`,extra:`${totalAddr} − 2 = ${hostCount}`};
-      case "adressen_gesamt": return{type,question:`Präfixlänge:  /${prefix}\n\nWie viele Adressen (gesamt) enthält das Netz?\n(inkl. Netz- und Broadcastadresse)`,answer:String(totalAddr),hint:`2^(32−${prefix}) = 2^${32-prefix}`,extra:`Inkl. Netzadresse und Broadcast`};
-      case "cidr_zu_maske": return{type,question:`CIDR-Notation: /${prefix}\n\nWie lautet die Subnetzmaske?`,answer:mask,hint:`${prefix} Einsen, dann ${32-prefix} Nullen`,extra:`/${prefix} → ${mask}`};
-      case "maske_zu_cidr": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Präfixlänge? (Format: /XX)`,answer:`/${prefix}`,hint:`Zähle die führenden Einsen`,extra:`${mask} → /${prefix}`};
-      case "wildcard": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Wildcard-Maske?`,answer:wildcard,hint:`255.255.255.255 XOR Subnetzmaske`,extra:`${mask} invertiert = ${wildcard}`};
-      case "gleiche_netz":{
-        const sameNet=Math.random()>0.5;
-        const ip2=sameNet?intToIp(networkInt+Math.floor(Math.random()*(broadcastInt-networkInt-1))+1):intToIp((networkInt+totalAddr)>>>0);
-        const net2=(ipToInt(ip2)&maskInt)>>>0;
-        const ans=networkInt===net2?"Ja":"Nein";
-        return{type,question:`IP 1: ${hostIp}\nIP 2: ${ip2}\nPräfixlänge: /${prefix}\n\nLiegen beide IPs im selben Netz? (Ja/Nein)`,answer:ans,hint:`Netz von IP1: ${network}\nNetz von IP2: ${intToIp(net2)}`,extra:`${hostIp} → ${network}\n${ip2} → ${intToIp(net2)}`};
-      }
-      case "anzahl_subnetze":{
-        const op=Math.floor(Math.random()*15)+8;
-        const np=op+Math.floor(Math.random()*4)+1;
-        if(np>30) return generateIPv4Task();
-        return{type,question:`Ursprüngliches Netz: /${op}\nNeue Präfixlänge:    /${np}\n\nWie viele Subnetze entstehen?`,answer:String(Math.pow(2,np-op)),hint:`2^(${np}−${op}) = 2^${np-op}`,extra:`2^${np-op} = ${Math.pow(2,np-op)} Subnetze`};
-      }
-      case "netzbits_hostbits": return{type,question:`Präfixlänge: /${prefix}\n\nNetz- und Hostbits?\n(Format: XX Netzbits, XX Hostbits)`,answer:`${prefix} Netzbits, ${32-prefix} Hostbits`,hint:`Netzbits = Präfixlänge / Hostbits = 32 − Präfixlänge`,extra:`/${prefix} → ${prefix} Netzbits, ${32-prefix} Hostbits`};
-      case "binaer_oktet":{
-        const oct=Math.floor(Math.random()*254)+1;
-        return{type,question:`Dezimalwert: ${oct}\n\nWie lautet die 8-Bit-Binärdarstellung?`,answer:toBin8(oct),hint:`Stellenwerte: 128 · 64 · 32 · 16 · 8 · 4 · 2 · 1`,extra:`${oct} = ${toBin8(oct)}`};
-      }
-      case "netzklasse":{
-        const cls=[{ip:"10.0.0.1",c:"A"},{ip:"172.16.5.1",c:"B"},{ip:"192.168.1.1",c:"C"},{ip:"224.0.0.5",c:"D (Multicast)"},{ip:"127.0.0.1",c:"Loopback"}];
-        const e=cls[Math.floor(Math.random()*cls.length)];
-        return{type,question:`IP-Adresse: ${e.ip}\n\nWelcher Netzklasse gehört diese IP an?`,answer:e.c,hint:`A: 1–126 · B: 128–191 · C: 192–223 · D: 224–239 · Loopback: 127`,extra:`${e.ip.split(".")[0]}.x → Klasse ${e.c}`};
-      }
-      case "privat_oeffentlich":{
-        const ex=[{ip:"10.5.3.1",a:"Privat"},{ip:"172.20.1.1",a:"Privat"},{ip:"192.168.100.5",a:"Privat"},{ip:"8.8.8.8",a:"Öffentlich"},{ip:"1.1.1.1",a:"Öffentlich"},{ip:"203.0.113.5",a:"Öffentlich"}];
-        const e=ex[Math.floor(Math.random()*ex.length)];
-        return{type,question:`IP-Adresse: ${e.ip}\n\nPrivat oder öffentlich? (Privat/Öffentlich)`,answer:e.a,hint:`Privat: 10.0.0.0/8 · 172.16.0.0/12 · 192.168.0.0/16`,extra:`${e.ip} → ${e.a}`};
-      }
-      case "apipa_loopback":{
-        const ex=[{ip:"169.254.10.5",a:"APIPA"},{ip:"127.0.0.1",a:"Loopback"},{ip:"127.5.0.1",a:"Loopback"},{ip:"169.254.255.1",a:"APIPA"},{ip:"192.168.1.1",a:"Keines von beiden"}];
-        const e=ex[Math.floor(Math.random()*ex.length)];
-        return{type,question:`IP-Adresse: ${e.ip}\n\nAPIPa, Loopback oder Keines von beiden?\n(Antwort: APIPA / Loopback / Keines von beiden)`,answer:e.a,hint:`APIPA: 169.254.0.0/16 · Loopback: 127.0.0.0/8`,extra:`${e.ip} → ${e.a}`};
-      }
-      case "punkt_zu_punkt":{
-        const pfx=[30,31][Math.floor(Math.random()*2)];
-        if(pfx===30) return{type,question:`Punkt-zu-Punkt: /${pfx}\n\nWie viele nutzbare Host-IPs?`,answer:"2",hint:`/30: 4 Adressen − 2 (Netz+Broadcast) = 2 nutzbar`,extra:`/30 → 2 nutzbare Hosts`};
-        return{type,question:`Punkt-zu-Punkt: /${pfx}\n\nWie viele Adressen und was ist der Sonderfall?\n(Format: Zahl, Stichwort)`,answer:"2, kein Broadcast (RFC 3021)",hint:`/31: Sonderfall – beide Adressen als Host nutzbar`,extra:`/31 → 2 Adressen, beide nutzbar`};
-      }
-      default: return generateIPv4Task();
-    }
-  }
-
-  // ── IPv6 helpers ──
-  function compressIPv6(full){
-  let parts=full.split(":").map(g=>g.replace(/^0+/,"")||"0");
-  let best={s:-1,l:0},cur={s:-1,l:0};
-  for(let i=0;i<8;i++){if(parts[i]==="0"){if(cur.s===-1)cur={s:i,l:1};else cur.l++;if(cur.l>best.l)best={...cur};}else cur={s:-1,l:0};}
-  if(best.l>1){const l=parts.slice(0,best.s).join(":");const r=parts.slice(best.s+best.l).join(":");return l+"::"+r;}
-  return parts.join(":");
-  }
-  function randomIPv6Full(){ return Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0")).join(":"); }
-
-  function generateIPv6Task(){
-    const types=["netzadresse","hosts_anzahl","subnetz_anzahl","kuerzen","erweitern","adresstyp","prefix_interface","netzteil_hostteil","eui64","kein_broadcast","zero_compression_regel"];
-    const type=types[Math.floor(Math.random()*types.length)];
-    switch(type){
-      case "netzadresse":{
-        const groups=Math.floor(Math.random()*5)+2;const prefix=groups*16;
-        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-        const net=[...g.slice(0,groups),...Array(8-groups).fill("0000")].join(":");
-        return{type,question:`IPv6-Adresse: ${g.join(":")}\nPräfixlänge:  /${prefix}\n\nNetzadresse?\n(Alle 8 Gruppen)`,answer:net,hint:`Erste ${groups} Gruppen bleiben, Rest → 0000`,extra:`/${prefix} → ${groups} Gruppen behalten`};
-      }
-      case "hosts_anzahl":{
-        const prefix=(Math.floor(Math.random()*7)+1)*16;const exp=128-prefix;
-        return{type,question:`IPv6-Präfixlänge: /${prefix}\n\nAnzahl Adressen? (Format: 2^XX)`,answer:`2^${exp}`,hint:`2^(128−${prefix}) = 2^${exp}`,extra:`128−${prefix} = ${exp}`};
-      }
-      case "subnetz_anzahl":{
-        const ex=[{from:48,to:64,exp:16,cnt:"65.536"},{from:64,to:80,exp:16},{from:32,to:48,exp:16},{from:48,to:56,exp:8,cnt:"256"},{from:56,to:64,exp:8},{from:48,to:52,exp:4,cnt:"16"}];
-        const e=ex[Math.floor(Math.random()*ex.length)];
-        return{type,question:`/${e.from}-Netz → /${e.to}-Subnetze\n\nWie viele Subnetze? (Format: 2^XX)`,answer:`2^${e.exp}`,hint:`2^(${e.to}−${e.from}) = 2^${e.exp}`,extra:`2^${e.exp}${e.cnt?" = "+e.cnt+" Subnetze":""}`};
-      }
-      case "kuerzen":{
-  const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-  const zStart=Math.floor(Math.random()*5);
-  const zLen=Math.floor(Math.random()*2)+2;
-  for(let i=zStart;i<Math.min(zStart+zLen,8);i++)g[i]="0000";
-  const full=g.join(":");
-  const compressed=compressIPv6(full);
-  return{type,question:`Vollständig:\n${full}\n\nGekürzte Schreibweise?`,answer:compressed,hint:`1. Führende Nullen entfernen\n2. Längste Nullfolge → :: (nur einmal)`,extra:`→ ${compressed}`};
-}
-case "erweitern":{
-  const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-  const zStart=Math.floor(Math.random()*5);
-  const zLen=Math.floor(Math.random()*2)+2;
-  for(let i=zStart;i<Math.min(zStart+zLen,8);i++)g[i]="0000";
-  const full=g.join(":");
-  const compressed=compressIPv6(full);
-  return{type,question:`Gekürzt:\n${compressed}\n\nVollständige Schreibweise?\n(8 Gruppen à 4 Hex-Zeichen)`,answer:full,hint:`:: durch fehlende 0000-Gruppen ersetzen`,extra:`→ ${full}`};
-}
-      case "adresstyp":{
-        const opts=[
-          {ip:"2001:0db8:85a3:0000:0000:8a2e:0370:7334",a:"Global Unicast (GUA)",h:"Beginnt mit 2000::/3"},
-          {ip:"fe80:0000:0000:0000:0202:b3ff:fe1e:8329",a:"Link-Local",h:"fe80::/10"},
-          {ip:"fc00:0000:0000:0001:0000:0000:0000:0001",a:"Unique Local (ULA)",h:"fc00::/7"},
-          {ip:"ff02:0000:0000:0000:0000:0000:0000:0001",a:"Multicast",h:"ff00::/8"},
-          {ip:"0000:0000:0000:0000:0000:0000:0000:0001",a:"Loopback",h:"::1"},
-          {ip:"fd12:3456:789a:0001:0000:0000:0000:0001",a:"Unique Local (ULA)",h:"fd... = ULA"},
-        ];
-        const e=opts[Math.floor(Math.random()*opts.length)];
-        return{type,question:`IPv6: ${compressIPv6(e.ip)}\n\nAdresstyp?\n(GUA / Link-Local / ULA / Multicast / Loopback)`,answer:e.a,hint:e.h,extra:`→ ${e.a}`};
-      }
-      case "prefix_interface":{
-        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-        const iid=g.slice(4).join(":");
-        return{type,question:`IPv6: ${g.join(":")}\nPräfixlänge: /64\n\nInterface-ID?\n(Format: xxxx:xxxx:xxxx:xxxx)`,answer:iid,hint:`Bei /64: Gruppen 5–8 sind die Interface-ID`,extra:`Gruppen 5–8: ${iid}`};
-      }
-      case "netzteil_hostteil":{
-        const groups=Math.floor(Math.random()*4)+2;const prefix=groups*16;
-        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-        const netteil=g.slice(0,groups).join(":");
-        return{type,question:`IPv6: ${g.join(":")}\nPräfixlänge: /${prefix}\n\nNetzanteil?\n(Erste X Gruppen)`,answer:netteil,hint:`/${prefix} = erste ${groups} Gruppen = Netzanteil`,extra:`Netzanteil: ${netteil}\nHostanteil: ${g.slice(groups).join(":")}`};
-      }
-      case "eui64":{
-        const mb=Array.from({length:6},()=>Math.floor(Math.random()*256));
-        const mac=mb.map(b=>b.toString(16).padStart(2,"0")).join(":");
-        const b0=(mb[0]^0x02).toString(16).padStart(2,"0");
-        const eui=`${b0}${mb[1].toString(16).padStart(2,"0")}:${mb[2].toString(16).padStart(2,"0")}ff:fe${mb[3].toString(16).padStart(2,"0")}:${mb[4].toString(16).padStart(2,"0")}${mb[5].toString(16).padStart(2,"0")}`;
-        return{type,question:`MAC: ${mac}\n\nEUI-64 Interface-ID?\n(Format: XXXX:XXFF:FEXX:XXXX)`,answer:eui,hint:`1. MAC halbieren\n2. FF:FE einfügen\n3. 7. Bit invertieren (XOR 0x02)`,extra:`${mac} → ${eui}`};
-      }
-      case "kein_broadcast":
-        return{type,question:`IPv4 verwendet Broadcast.\n\nWas nutzt IPv6 stattdessen?`,answer:"Multicast",hint:`ff02::1 = alle Nodes · ff02::2 = alle Router`,extra:`IPv6: Multicast statt Broadcast`};
-      case "zero_compression_regel":
-        return{type,question:`Warum darf :: nur einmal in einer IPv6-Adresse vorkommen?\n(Stichwort)`,answer:"Eindeutigkeit",hint:`Mehrfaches :: → unklar wie viele 0-Gruppen wo gemeint sind`,extra:`:: nur einmal → Adresse eindeutig`};
-      default: return generateIPv6Task();
-    }
-  }
-
-  // ── Grading ──
-    const GRADE_TABLES={
-    5: {5:1,4:2,3:3,2:4,1:5,0:6},
+  const GRADE_TABLES={
+    5:{5:1,4:2,3:3,2:4,1:5,0:6},
     10:{10:1,9:1.5,8:2,7:2.5,6:3,5:3.5,4:4,3:4.5,2:5,1:5.5,0:6},
     20:{20:1,19:1.2,18:1.5,17:1.7,16:2,15:2.2,14:2.5,13:2.7,12:3,11:3.2,10:3.5,9:3.7,8:4,7:4.2,6:4.5,5:4.7,4:5,3:5.2,2:5.5,1:5.7,0:6},
     30:{30:1,29:1.2,28:1.3,27:1.5,26:1.7,25:1.8,24:2,23:2.2,22:2.3,21:2.5,20:2.7,19:2.8,18:3,17:3.2,16:3.3,15:3.5,14:3.7,13:3.8,12:4,11:4.2,10:4.3,9:4.5,8:4.7,7:4.8,6:5,5:5.2,4:5.3,3:5.5,2:5.7,1:5.8,0:6}
   };
+
   function calcNote(correct,total){
     const table=GRADE_TABLES[total]||GRADE_TABLES[10];
     const note=table[correct]??6;
@@ -1967,87 +1804,84 @@ case "erweitern":{
     return{note,label,color};
   }
 
-  // ── Session control ──
-  function startSession(){
+  async function startSession(){
     if(!version||!questionCount)return;
-    setTask(version==="ipv4"?generateIPv4Task():generateIPv6Task());
-    setHistory([]);setAnswer("");setChecked(false);setIsCorrect(false);
-    setStreak(0);setKiEval(null);setPhase("question");
-    setTimeout(()=>inputRef.current?.focus(),80);
-  }
-
-  function checkAnswer(){
-    if(!answer.trim()||checked)return;
-    const norm=s=>s.trim().toLowerCase().replace(/\s+/g," ").replace(/\s*-\s*/g," - ");
-    const u=norm(answer);const c=norm(task.answer);
-    const ok=u===c||(c.startsWith(u)&&u.length>3);
-    setIsCorrect(ok);setChecked(true);
-    if(ok)setStreak(s=>s+1);else setStreak(0);
-  }
-
-  function nextQuestion(){
-    const newHist=[...history,{task,userAnswer:answer,isCorrect}];
-    setHistory(newHist);
-    if(newHist.length>=questionCount){
-      setPhase("result");
-      fetchKiEval(newHist);
-    } else {
-      setTask(version==="ipv4"?generateIPv4Task():generateIPv6Task());
-      setAnswer("");setChecked(false);setIsCorrect(false);
-      setTimeout(()=>inputRef.current?.focus(),80);
+    setPhase("loading");
+    const system="Du bist IHK FISI Prüfungscoach. Antworte NUR mit validem JSON-Array, kein anderer Text.";
+    const content=`Generiere genau ${questionCount} ${version.toUpperCase()}-Subnetting-Aufgaben für IHK FISI Prüfungsvorbereitung als JSON-Array.\n\nFormat: [{"question":"Aufgabentext","answer":"Musterantwort","hint":"Lösungshinweis","type":"typ"}]\n\n${version==="ipv4"?`IPv4-Typen abwechselnd: Netzadresse, Broadcast, erste/letzte Host-IP, nutzbare Hosts, Gesamtadressen, CIDR→Maske, Maske→CIDR, Wildcard, Subnetzanzahl, Binärdarstellung Oktet, Netzklasse, privat/öffentlich, APIPA/Loopback, Punkt-zu-Punkt. Verschiedene realistische private IPs und Präfixlängen /8–/30.`:`IPv6-Typen abwechselnd: Adresse kürzen (:: Notation), Adresse erweitern (vollständig), EUI-64 aus MAC berechnen, Adresstyp bestimmen (GUA/Link-Local/ULA/Multicast/Loopback), Netzadresse /64 berechnen, Interface-ID extrahieren, Anzahl Adressen (2^x Format), Anzahl Subnetze berechnen.`}\n\nAntworte NUR mit dem JSON-Array.`;
+    try{
+      const r=await callKI([{role:"user",content}],system);
+      const match=r.match(/\[[\s\S]*\]/);
+      if(!match)throw new Error("no json");
+      const questions=JSON.parse(match[0]);
+      setAllQuestions(questions);
+      setCurrentIndex(0);
+      setHistory([]);setAnswer("");setChecked(false);setIsCorrect(false);
+      setStreak(0);setKiEval(null);setKiFeedback("");
+      setPhase("question");
+    }catch(e){
+      setPhase("setup");
+      alert("Fehler beim Laden der Aufgaben – bitte nochmal versuchen.");
     }
   }
 
-  async function fetchKiEval(hist){
-  setKiLoading(true);
-  const correct=hist.filter(h=>h.isCorrect).length;
-  const total=hist.length;
-  const pct=Math.round(correct/total*100);
-  const n=calcNote(correct,total);
-  const summary=hist.map((h,i)=>`${i+1}. ${h.task.question}\n   Antwort: ${h.userAnswer||"(keine)"} → ${h.isCorrect?"✓":"✗"} (Korrekt: ${h.task.answer})`).join("\n");
-  const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
-  const messages=[{role:"user",content:`Ich habe ${total} ${version.toUpperCase()}-Subnetting-Aufgaben bearbeitet: ${correct}/${total} richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nErgebnisse:\n${summary}\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Lerntipps`}];
-  const r=await callKI(messages,system);
-  const session={
-    date:new Date().toISOString(),
-    version,
-    total,
-    correct,
-    pct,
-    note:n,
-    questions:hist.map(h=>({question:h.task.question,answer:h.task.answer,userAnswer:h.userAnswer,isCorrect:h.isCorrect}))
-  };
-  const updated=[session,...(()=>{try{return JSON.parse(localStorage.getItem("subnetting_history")||"[]");}catch{return[];}})()].slice(0,50);
-  localStorage.setItem("subnetting_history",JSON.stringify(updated));
-  setSessionHistory(updated);
-  setKiEval(r);
-  setKiLoading(false);
-}
-
-  function resetAll(){
-    setVersion(null);setQuestionCount(null);setTask(null);
-    setHistory([]);setPhase("setup");setKiEval(null);setStreak(0);
+  async function checkAnswer(){
+    if(!answer.trim()||checked||answerLoading)return;
+    setAnswerLoading(true);
+    const currentTask=allQuestions[currentIndex];
+    const system="Du bist Subnetting-Bewerter. Antworte NUR mit JSON: {\"correct\":true,\"feedback\":\"kurze Erklärung auf Deutsch\"}";
+    const content=`Aufgabe: ${currentTask.question}\nMusterantwort: ${currentTask.answer}\nSchülerantwort: ${answer}\n\nIst die Schülerantwort inhaltlich korrekt? Sei flexibel bei Schreibweise, Leerzeichen, Großschreibung, führenden Nullen. Antworte NUR mit JSON.`;
+    try{
+      const r=await callKI([{role:"user",content}],system);
+      const result=JSON.parse(r.match(/\{[\s\S]*\}/)?.[0]||'{"correct":false,"feedback":""}');
+      setIsCorrect(result.correct);setKiFeedback(result.feedback||"");setChecked(true);
+      if(result.correct)setStreak(s=>s+1);else setStreak(0);
+    }catch{
+      const norm=s=>s.trim().toLowerCase().replace(/\s+/g," ");
+      const ok=norm(answer)===norm(currentTask.answer);
+      setIsCorrect(ok);setChecked(true);
+      if(ok)setStreak(s=>s+1);else setStreak(0);
+    }
+    setAnswerLoading(false);
   }
 
-  const taskMeta={
-    netzadresse:{label:"Netzadresse",color:"#3b82f6"},broadcast:{label:"Broadcast",color:"#ef4444"},
-    erste_ip:{label:"Erste Host-IP",color:"#38bdf8"},letzte_ip:{label:"Letzte Host-IP",color:"#fb923c"},
-    hostbereich:{label:"Hostbereich",color:"#06b6d4"},hosts_nutzbar:{label:"Nutzbare Hosts",color:"#22c55e"},
-    adressen_gesamt:{label:"Gesamtadressen",color:"#84cc16"},cidr_zu_maske:{label:"CIDR → Maske",color:"#a855f7"},
-    maske_zu_cidr:{label:"Maske → CIDR",color:"#f97316"},wildcard:{label:"Wildcard-Maske",color:"#f59e0b"},
-    gleiche_netz:{label:"Gleiches Netz?",color:"#ec4899"},anzahl_subnetze:{label:"Subnetzanzahl",color:"#eab308"},
-    netzbits_hostbits:{label:"Netz-/Hostbits",color:"#64748b"},binaer_oktet:{label:"Binär-Oktet",color:"#0ea5e9"},
-    netzklasse:{label:"Netzklasse",color:"#d946ef"},privat_oeffentlich:{label:"Privat/Öffentlich",color:"#10b981"},
-    apipa_loopback:{label:"APIPA/Loopback",color:"#f43f5e"},punkt_zu_punkt:{label:"P2P-Netz",color:"#6366f1"},
-    hosts_anzahl:{label:"Adressen IPv6",color:"#22c55e"},subnetz_anzahl:{label:"Subnetzanzahl IPv6",color:"#eab308"},
-    kuerzen:{label:"IPv6 kürzen",color:"#3b82f6"},erweitern:{label:"IPv6 erweitern",color:"#8b5cf6"},
-    adresstyp:{label:"Adresstyp",color:"#a855f7"},prefix_interface:{label:"Interface-ID",color:"#f97316"},
-    netzteil_hostteil:{label:"Netz-/Hostanteil",color:"#06b6d4"},eui64:{label:"EUI-64",color:"#f59e0b"},
-    kein_broadcast:{label:"Kein Broadcast",color:"#ef4444"},zero_compression_regel:{label:":: Regel",color:"#64748b"},
-  };
+  function nextQuestion(){
+    const currentTask=allQuestions[currentIndex];
+    const newHist=[...history,{task:currentTask,userAnswer:answer,isCorrect}];
+    setHistory(newHist);
+    if(newHist.length>=questionCount){setPhase("result");fetchKiEval(newHist);}
+    else{setCurrentIndex(i=>i+1);setAnswer("");setChecked(false);setIsCorrect(false);setKiFeedback("");setTimeout(()=>inputRef.current?.focus(),80);}
+  }
 
-  const correctCount=history.filter(h=>h.isCorrect).length+(checked&&isCorrect?0:0);
-  const currentQ=history.length+1;
+  function skipQuestion(){
+    const currentTask=allQuestions[currentIndex];
+    const newHist=[...history,{task:currentTask,userAnswer:"",isCorrect:false}];
+    setHistory(newHist);setStreak(0);
+    if(newHist.length>=questionCount){setPhase("result");fetchKiEval(newHist);}
+    else{setCurrentIndex(i=>i+1);setAnswer("");setChecked(false);setIsCorrect(false);setKiFeedback("");setTimeout(()=>inputRef.current?.focus(),80);}
+  }
+
+  async function fetchKiEval(hist){
+    setKiLoading(true);
+    const correct=hist.filter(h=>h.isCorrect).length;
+    const total=hist.length;
+    const pct=Math.round(correct/total*100);
+    const n=calcNote(correct,total);
+    const summary=hist.map((h,i)=>`${i+1}. ${h.task.question}\n   Antwort: ${h.userAnswer||"(keine)"} → ${h.isCorrect?"✓":"✗"} (Korrekt: ${h.task.answer})`).join("\n");
+    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
+    const messages=[{role:"user",content:`Ich habe ${total} ${version.toUpperCase()}-Subnetting-Aufgaben bearbeitet: ${correct}/${total} richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nErgebnisse:\n${summary}\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Lerntipps`}];
+    const r=await callKI(messages,system);
+    const session={date:new Date().toISOString(),version,total,correct,pct,note:n,questions:hist.map(h=>({question:h.task.question,answer:h.task.answer,userAnswer:h.userAnswer,isCorrect:h.isCorrect}))};
+    const updated=[session,...(()=>{try{return JSON.parse(localStorage.getItem("subnetting_history")||"[]");}catch{return[];}})()].slice(0,50);
+    localStorage.setItem("subnetting_history",JSON.stringify(updated));
+    setSessionHistory(updated);setKiEval(r);setKiLoading(false);
+  }
+
+  function resetAll(){
+    setVersion(null);setQuestionCount(null);setAllQuestions([]);setCurrentIndex(0);
+    setHistory([]);setPhase("setup");setKiEval(null);setStreak(0);
+    setKiFeedback("");setAnswer("");setChecked(false);setIsCorrect(false);
+  }
 
   return(
     <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center"}}>
@@ -2062,7 +1896,7 @@ case "erweitern":{
           {phase==="question"&&(
             <div style={{display:"flex",gap:"1rem",alignItems:"center"}}>
               <div style={{textAlign:"center"}}>
-                <div style={{fontSize:"1rem",fontWeight:"bold",color:"#e0e0e0",fontFamily:"'Courier New',monospace"}}>{currentQ}/{questionCount}</div>
+                <div style={{fontSize:"1rem",fontWeight:"bold",color:"#e0e0e0",fontFamily:"'Courier New',monospace"}}>{history.length+1}/{questionCount}</div>
                 <div style={{fontSize:"0.58rem",color:"#444"}}>Frage</div>
               </div>
               {streak>=3&&<div style={{textAlign:"center"}}>
@@ -2074,174 +1908,175 @@ case "erweitern":{
         </div>
 
         {/* ── SETUP ── */}
-{phase==="setup"&&(
-  <div>
-    {/* Protokoll */}
-    <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>1. PROTOKOLL WÄHLEN</div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"1.25rem"}}>
-      {[{id:"ipv4",label:"IPv4",icon:"🌐",color:"#3b82f6",sub:"32-Bit · Netzadr · Broadcast · Hosts · Masken"},{id:"ipv6",label:"IPv6",icon:"🔵",color:"#a855f7",sub:"128-Bit · Kürzen · EUI-64 · Adresstypen"}].map(v=>(
-        <button key={v.id} onClick={()=>setVersion(v.id)}
-          style={{padding:"1.1rem 1rem",background:version===v.id?`${v.color}20`:"#0c0c0c",border:`1px solid ${version===v.id?v.color:"#1e1e1e"}`,borderRadius:"12px",cursor:"pointer",color:version===v.id?v.color:"#555",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
-          <div style={{fontSize:"1.5rem",marginBottom:"0.4rem"}}>{v.icon}</div>
-          <div style={{fontSize:"0.95rem",fontWeight:"bold",marginBottom:"0.2rem"}}>{v.label}</div>
-          <div style={{fontSize:"0.65rem",color:version===v.id?v.color+"aa":"#444"}}>{v.sub}</div>
-        </button>
-      ))}
-    </div>
-
-    {/* Fragenanzahl */}
-    <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>2. FRAGENANZAHL</div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0.5rem",marginBottom:"1.25rem"}}>
-      {[5,10,20,30].map(n=>(
-        <button key={n} onClick={()=>setQuestionCount(n)}
-          style={{padding:"0.75rem",background:questionCount===n?"#ffffff18":"#0c0c0c",border:`1px solid ${questionCount===n?"#fff":"#1e1e1e"}`,borderRadius:"10px",cursor:"pointer",color:questionCount===n?"#fff":"#555",fontFamily:"'Courier New',monospace",fontSize:"1rem",fontWeight:"bold",transition:"all 0.15s"}}>
-          {n}
-        </button>
-      ))}
-    </div>
-
-    {/* Start */}
-    <button onClick={startSession} disabled={!version||!questionCount}
-      style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:version&&questionCount?"#fff":"#161616",border:"none",color:version&&questionCount?"#000":"#333",fontSize:"0.95rem",fontWeight:"bold",cursor:version&&questionCount?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"1rem"}}>
-      {version&&questionCount?`${questionCount} ${version.toUpperCase()}-Fragen starten →`:"Protokoll & Fragenanzahl wählen"}
-    </button>
-
-    {/* Historie Button */}
-    {sessionHistory.length>0&&(
-      <button onClick={()=>setPhase("history")}
-        style={{width:"100%",padding:"0.75rem",borderRadius:"12px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.88rem",cursor:"pointer",fontFamily:"inherit",marginBottom:"1.5rem"}}>
-        📋 Historie ansehen ({sessionHistory.length} Sessions)
-      </button>
-    )}
-
-    {/* Formelblatt */}
-    <div style={{padding:"1rem",background:"#0c0c0c",border:"1px solid #181818",borderRadius:"12px"}}>
-      <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>WICHTIGE FORMELN</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem"}}>
-        {[["Netzadresse","IP AND Subnetzmaske"],["Broadcast","Netz OR (NOT Maske)"],["Nutzbare Hosts","2^(32−Prefix) − 2"],["IPv6 Adressen","2^(128−Prefix)"],["Subnetzmaske","/24 = 255.255.255.0"],["Subnetzanzahl","2^(neu − alt)"]].map(([l,f])=>(
-          <div key={l} style={{padding:"0.5rem 0.65rem",background:"#111",borderRadius:"7px",border:"1px solid #191919"}}>
-            <div style={{fontSize:"0.6rem",color:"#444",marginBottom:"0.2rem"}}>{l}</div>
-            <div style={{fontSize:"0.74rem",color:"#777",fontFamily:"'Courier New',monospace"}}>{f}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-)}
-
-        {/* ── QUESTION ── */}
-        {phase==="question"&&task&&(
+        {phase==="setup"&&(
           <div>
-            {/* Fortschrittsbalken */}
-            <div style={{height:"3px",background:"#1a1a1a",borderRadius:"2px",marginBottom:"1rem",overflow:"hidden"}}>
-              <div style={{height:"100%",background:"#3b82f6",borderRadius:"2px",width:`${(history.length/questionCount)*100}%`,transition:"width 0.3s"}}/>
-            </div>
-
-            <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"1rem",flexWrap:"wrap"}}>
-              <button onClick={resetAll} style={{background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit"}}>← Abbrechen</button>
-              {taskMeta[task.type]&&<span style={{fontSize:"0.68rem",background:`${taskMeta[task.type].color}15`,color:taskMeta[task.type].color,padding:"0.2rem 0.65rem",borderRadius:"20px",border:`1px solid ${taskMeta[task.type].color}30`,fontWeight:"bold"}}>{taskMeta[task.type].label}</span>}
-              {!checked&&<button onClick={()=>nextQuestion()} style={{marginLeft:"auto",background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.3rem"}}><Icon name="refresh" size={11}/>Überspringen</button>}
-            </div>
-
-            <div style={{background:"#0b0b0b",border:"1px solid #1a1a1a",borderRadius:"14px",padding:"1.5rem",marginBottom:"1rem"}}>
-              <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>AUFGABE {history.length+1} / {questionCount}</div>
-              <pre style={{fontFamily:"'Courier New',monospace",fontSize:"0.95rem",color:"#ddd",lineHeight:1.85,whiteSpace:"pre-wrap",margin:0}}>{task.question}</pre>
-            </div>
-
-            {!checked?(
-              <div>
-                <input ref={inputRef} value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")checkAnswer();}}
-                  placeholder={version==="ipv4"?"z.B.  192.168.1.0  oder  254  oder  /24":"z.B.  2001:0db8:...:0000  oder  2^64"}
-                  style={{width:"100%",background:"#0f0f0f",border:"1px solid #252525",borderRadius:"10px",padding:"0.85rem 1rem",color:"#ddd",fontSize:"0.9rem",outline:"none",fontFamily:"'Courier New',monospace",marginBottom:"0.75rem",boxSizing:"border-box"}}/>
-                <button onClick={checkAnswer} disabled={!answer.trim()}
-                  style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:answer.trim()?"#3b82f6":"#161616",border:"none",color:answer.trim()?"#fff":"#333",fontSize:"0.88rem",fontWeight:"bold",cursor:answer.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
-                  Prüfen →
+            <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>1. PROTOKOLL WÄHLEN</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"1.25rem"}}>
+              {[{id:"ipv4",label:"IPv4",icon:"🌐",color:"#3b82f6",sub:"32-Bit · Netzadr · Broadcast · Hosts · Masken"},{id:"ipv6",label:"IPv6",icon:"🔵",color:"#a855f7",sub:"128-Bit · Kürzen · EUI-64 · Adresstypen"}].map(v=>(
+                <button key={v.id} onClick={()=>setVersion(v.id)}
+                  style={{padding:"1.1rem 1rem",background:version===v.id?`${v.color}20`:"#0c0c0c",border:`1px solid ${version===v.id?v.color:"#1e1e1e"}`,borderRadius:"12px",cursor:"pointer",color:version===v.id?v.color:"#555",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
+                  <div style={{fontSize:"1.5rem",marginBottom:"0.4rem"}}>{v.icon}</div>
+                  <div style={{fontSize:"0.95rem",fontWeight:"bold",marginBottom:"0.2rem"}}>{v.label}</div>
+                  <div style={{fontSize:"0.65rem",color:version===v.id?v.color+"aa":"#444"}}>{v.sub}</div>
                 </button>
-              </div>
-            ):(
-              <div>
-                <div style={{padding:"1.25rem",background:isCorrect?"#081208":"#130808",border:`1px solid ${isCorrect?"#166534":"#7f1d1d"}`,borderRadius:"12px",marginBottom:"0.85rem"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.75rem"}}>
-                    <span style={{fontSize:"1.3rem"}}>{isCorrect?"✅":"❌"}</span>
-                    <span style={{fontWeight:"bold",fontSize:"0.95rem",color:isCorrect?"#4ade80":"#f87171"}}>{isCorrect?"Richtig!":"Nicht ganz!"}</span>
-                    {isCorrect&&streak>=3&&<span style={{fontSize:"0.8rem",marginLeft:"0.2rem"}}>🔥 {streak}er-Serie!</span>}
-                  </div>
-                  {!isCorrect&&<div style={{fontSize:"0.83rem",color:"#888",marginBottom:"0.5rem",fontFamily:"'Courier New',monospace"}}>Deine Antwort: <span style={{color:"#f87171"}}>{answer}</span></div>}
-                  <div style={{fontSize:"0.83rem",color:"#aaa",fontFamily:"'Courier New',monospace"}}>Korrekte Antwort: <span style={{color:"#4ade80",fontWeight:"bold"}}>{task.answer}</span></div>
-                  {task.extra&&<div style={{marginTop:"0.75rem",padding:"0.55rem 0.75rem",background:"#0a0a0a",borderRadius:"7px",fontSize:"0.78rem",color:"#555",fontFamily:"'Courier New',monospace"}}>{task.extra}</div>}
-                </div>
-                <div style={{padding:"0.75rem 1rem",background:"#080d14",border:"1px solid #1a2535",borderRadius:"10px",marginBottom:"0.85rem",fontSize:"0.8rem",color:"#5b9bd5",lineHeight:1.65}}>
-                  💡 <strong>Tipp:</strong> {task.hint}
-                </div>
-                <button onClick={nextQuestion}
-                  style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.88rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
-                  {history.length+1>=questionCount?"Auswertung ansehen →":"Nächste Aufgabe →"}
+              ))}
+            </div>
+
+            <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>2. FRAGENANZAHL</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0.5rem",marginBottom:"1.25rem"}}>
+              {[5,10,20,30].map(n=>(
+                <button key={n} onClick={()=>setQuestionCount(n)}
+                  style={{padding:"0.75rem",background:questionCount===n?"#ffffff18":"#0c0c0c",border:`1px solid ${questionCount===n?"#fff":"#1e1e1e"}`,borderRadius:"10px",cursor:"pointer",color:questionCount===n?"#fff":"#555",fontFamily:"'Courier New',monospace",fontSize:"1rem",fontWeight:"bold",transition:"all 0.15s"}}>
+                  {n}
                 </button>
-              </div>
+              ))}
+            </div>
+
+            <button onClick={startSession} disabled={!version||!questionCount}
+              style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:version&&questionCount?"#fff":"#161616",border:"none",color:version&&questionCount?"#000":"#333",fontSize:"0.95rem",fontWeight:"bold",cursor:version&&questionCount?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"1rem"}}>
+              {version&&questionCount?`${questionCount} ${version.toUpperCase()}-Fragen starten →`:"Protokoll & Fragenanzahl wählen"}
+            </button>
+
+            {sessionHistory.length>0&&(
+              <button onClick={()=>setPhase("history")}
+                style={{width:"100%",padding:"0.75rem",borderRadius:"12px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.88rem",cursor:"pointer",fontFamily:"inherit",marginBottom:"1.5rem"}}>
+                📋 Historie ansehen ({sessionHistory.length} Sessions)
+              </button>
             )}
+
+            <div style={{padding:"1rem",background:"#0c0c0c",border:"1px solid #181818",borderRadius:"12px"}}>
+              <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>WICHTIGE FORMELN</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem"}}>
+                {[["Netzadresse","IP AND Subnetzmaske"],["Broadcast","Netz OR (NOT Maske)"],["Nutzbare Hosts","2^(32−Prefix) − 2"],["IPv6 Adressen","2^(128−Prefix)"],["Subnetzmaske","/24 = 255.255.255.0"],["Subnetzanzahl","2^(neu − alt)"]].map(([l,f])=>(
+                  <div key={l} style={{padding:"0.5rem 0.65rem",background:"#111",borderRadius:"7px",border:"1px solid #191919"}}>
+                    <div style={{fontSize:"0.6rem",color:"#444",marginBottom:"0.2rem"}}>{l}</div>
+                    <div style={{fontSize:"0.74rem",color:"#777",fontFamily:"'Courier New',monospace"}}>{f}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
+        {/* ── LOADING ── */}
+        {phase==="loading"&&(
+          <div style={{textAlign:"center",padding:"3rem 1rem"}}>
+            <div style={{fontSize:"2.5rem",marginBottom:"1rem"}}>🤖</div>
+            <div style={{color:"#94a3b8",fontSize:"1rem",marginBottom:"0.5rem"}}>KI generiert {questionCount} Aufgaben…</div>
+            <div style={{color:"#475569",fontSize:"0.8rem"}}>Einen Moment bitte</div>
+          </div>
+        )}
+
+        {/* ── QUESTION ── */}
+        {phase==="question"&&allQuestions[currentIndex]&&(()=>{
+          const currentTask=allQuestions[currentIndex];
+          return(
+            <div>
+              <div style={{height:"3px",background:"#1a1a1a",borderRadius:"2px",marginBottom:"1rem",overflow:"hidden"}}>
+                <div style={{height:"100%",background:"#3b82f6",borderRadius:"2px",width:`${(history.length/questionCount)*100}%`,transition:"width 0.3s"}}/>
+              </div>
+
+              <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"1rem",flexWrap:"wrap"}}>
+                <button onClick={resetAll} style={{background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit"}}>← Abbrechen</button>
+                {!checked&&<button onClick={skipQuestion} style={{marginLeft:"auto",background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.3rem"}}><Icon name="refresh" size={11}/>Überspringen</button>}
+              </div>
+
+              <div style={{background:"#0b0b0b",border:"1px solid #1a1a1a",borderRadius:"14px",padding:"1.5rem",marginBottom:"1rem"}}>
+                <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>AUFGABE {history.length+1} / {questionCount}</div>
+                <pre style={{fontFamily:"'Courier New',monospace",fontSize:"0.95rem",color:"#ddd",lineHeight:1.85,whiteSpace:"pre-wrap",margin:0}}>{currentTask.question}</pre>
+              </div>
+
+              {!checked?(
+                <div>
+                  <input ref={inputRef} value={answer} onChange={e=>setAnswer(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")checkAnswer();}}
+                    placeholder={version==="ipv4"?"z.B.  192.168.1.0  oder  254  oder  /24":"z.B.  2001:db8::1  oder  2^64"}
+                    style={{width:"100%",background:"#0f0f0f",border:"1px solid #252525",borderRadius:"10px",padding:"0.85rem 1rem",color:"#ddd",fontSize:"0.9rem",outline:"none",fontFamily:"'Courier New',monospace",marginBottom:"0.75rem",boxSizing:"border-box"}}/>
+                  <button onClick={checkAnswer} disabled={!answer.trim()||answerLoading}
+                    style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:answer.trim()&&!answerLoading?"#3b82f6":"#161616",border:"none",color:answer.trim()&&!answerLoading?"#fff":"#333",fontSize:"0.88rem",fontWeight:"bold",cursor:answer.trim()&&!answerLoading?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                    {answerLoading?"KI bewertet…":"Prüfen →"}
+                  </button>
+                </div>
+              ):(
+                <div>
+                  <div style={{padding:"1.25rem",background:isCorrect?"#081208":"#130808",border:`1px solid ${isCorrect?"#166534":"#7f1d1d"}`,borderRadius:"12px",marginBottom:"0.85rem"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.75rem"}}>
+                      <span style={{fontSize:"1.3rem"}}>{isCorrect?"✅":"❌"}</span>
+                      <span style={{fontWeight:"bold",fontSize:"0.95rem",color:isCorrect?"#4ade80":"#f87171"}}>{isCorrect?"Richtig!":"Nicht ganz!"}</span>
+                      {isCorrect&&streak>=3&&<span style={{fontSize:"0.8rem",marginLeft:"0.2rem"}}>🔥 {streak}er-Serie!</span>}
+                    </div>
+                    {!isCorrect&&<div style={{fontSize:"0.83rem",color:"#888",marginBottom:"0.5rem",fontFamily:"'Courier New',monospace"}}>Deine Antwort: <span style={{color:"#f87171"}}>{answer}</span></div>}
+                    <div style={{fontSize:"0.83rem",color:"#aaa",fontFamily:"'Courier New',monospace"}}>Korrekte Antwort: <span style={{color:"#4ade80",fontWeight:"bold"}}>{currentTask.answer}</span></div>
+                    {kiFeedback&&<div style={{fontSize:"0.82rem",color:"#94a3b8",marginTop:"0.5rem",fontStyle:"italic"}}>💬 {kiFeedback}</div>}
+                  </div>
+                  <div style={{padding:"0.75rem 1rem",background:"#080d14",border:"1px solid #1a2535",borderRadius:"10px",marginBottom:"0.85rem",fontSize:"0.8rem",color:"#5b9bd5",lineHeight:1.65}}>
+                    💡 <strong>Tipp:</strong> {currentTask.hint}
+                  </div>
+                  <button onClick={nextQuestion}
+                    style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.88rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+                    {history.length+1>=questionCount?"Auswertung ansehen →":"Nächste Aufgabe →"}
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── RESULT ── */}
         {phase==="result"&&(()=>{
-  const correct=history.filter(h=>h.isCorrect).length;
-  const total=history.length;
-  const pct=Math.round(correct/total*100);
-  const n=calcNote(correct,total);
-  return(
-    <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem"}}>
-      <div style={{textAlign:"center",marginBottom:"2rem"}}>
-        <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{pct>=80?"🏆":pct>=50?"💪":"📚"}</div>
-        <h2 style={{margin:0,color:"#f1f5f9"}}>Auswertung</h2>
-      </div>
+          const correct=history.filter(h=>h.isCorrect).length;
+          const total=history.length;
+          const pct=Math.round(correct/total*100);
+          const n=calcNote(correct,total);
+          return(
+            <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem"}}>
+              <div style={{textAlign:"center",marginBottom:"2rem"}}>
+                <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{pct>=80?"🏆":pct>=50?"💪":"📚"}</div>
+                <h2 style={{margin:0,color:"#f1f5f9"}}>Auswertung</h2>
+              </div>
 
-      {/* Note */}
-      <div style={{textAlign:"center",padding:"2rem",borderRadius:"16px",background:"#0f172a",border:`2px solid ${n.color}`,marginBottom:"1.5rem"}}>
-        <div style={{fontSize:"5rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
-        <div style={{fontSize:"1.5rem",color:n.color,marginTop:"0.5rem"}}>{n.label}</div>
-        <div style={{color:"#94a3b8",marginTop:"0.75rem",fontSize:"1.1rem"}}>{correct}/{total} richtig · {pct}%</div>
-        <div style={{color:"#475569",marginTop:"0.25rem",fontSize:"0.85rem"}}>{version?.toUpperCase()} · {total} Fragen</div>
-      </div>
+              <div style={{textAlign:"center",padding:"2rem",borderRadius:"16px",background:"#0f172a",border:`2px solid ${n.color}`,marginBottom:"1.5rem"}}>
+                <div style={{fontSize:"5rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
+                <div style={{fontSize:"1.5rem",color:n.color,marginTop:"0.5rem"}}>{n.label}</div>
+                <div style={{color:"#94a3b8",marginTop:"0.75rem",fontSize:"1.1rem"}}>{correct}/{total} richtig · {pct}%</div>
+                <div style={{color:"#475569",marginTop:"0.25rem",fontSize:"0.85rem"}}>{version?.toUpperCase()} · {total} Fragen</div>
+              </div>
 
-      {/* Einzelergebnisse */}
-      <div style={{marginBottom:"1.5rem"}}>
-        {history.map((h,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:"0.75rem",padding:"0.75rem",borderRadius:"8px",background:h.isCorrect?"#0a2e1a":"#2e0a0a",border:`1px solid ${h.isCorrect?"#22c55e33":"#ef444433"}`,marginBottom:"0.5rem"}}>
-            <span style={{fontSize:"1.1rem",marginTop:"0.1rem"}}>{h.isCorrect?"✅":"❌"}</span>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{color:"#e2e8f0",fontSize:"0.85rem",marginBottom:"0.25rem"}}>{h.task.question}</div>
-              <div style={{fontSize:"0.8rem",color:"#94a3b8"}}>Deine Antwort: <span style={{color:h.isCorrect?"#22c55e":"#ef4444"}}>{h.userAnswer||"(keine)"}</span></div>
-              {!h.isCorrect&&<div style={{fontSize:"0.8rem",color:"#94a3b8",marginTop:"0.1rem"}}>Richtig: <span style={{color:"#22c55e"}}>{h.task.answer}</span></div>}
+              <div style={{marginBottom:"1.5rem"}}>
+                {history.map((h,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:"0.75rem",padding:"0.75rem",borderRadius:"8px",background:h.isCorrect?"#0a2e1a":"#2e0a0a",border:`1px solid ${h.isCorrect?"#22c55e33":"#ef444433"}`,marginBottom:"0.5rem"}}>
+                    <span style={{fontSize:"1.1rem",marginTop:"0.1rem"}}>{h.isCorrect?"✅":"❌"}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"#e2e8f0",fontSize:"0.85rem",marginBottom:"0.25rem",whiteSpace:"pre-wrap"}}>{h.task.question}</div>
+                      <div style={{fontSize:"0.8rem",color:"#94a3b8"}}>Deine Antwort: <span style={{color:h.isCorrect?"#22c55e":"#ef4444"}}>{h.userAnswer||"(keine)"}</span></div>
+                      {!h.isCorrect&&<div style={{fontSize:"0.8rem",color:"#94a3b8",marginTop:"0.1rem"}}>Richtig: <span style={{color:"#22c55e"}}>{h.task.answer}</span></div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {kiLoading&&<div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem",color:"#94a3b8"}}>KI analysiert deine Ergebnisse…</div>}
+              {kiEval&&<div style={{padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem"}}>
+                <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.75rem"}}>KI-Auswertung</div>
+                <div style={{color:"#e2e8f0",fontSize:"0.9rem"}}>{renderMarkdown(kiEval)}</div>
+              </div>}
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"0.75rem"}}>
+                <button onClick={()=>startSession()}
+                  style={{padding:"0.85rem",borderRadius:"10px",background:"#0c0c0c",border:"1px solid #2a2a2a",color:"#aaa",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+                  Nochmal ({questionCount} Fragen)
+                </button>
+                <button onClick={resetAll}
+                  style={{padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+                  Neue Session
+                </button>
+              </div>
+              <button onClick={()=>setPhase("history")}
+                style={{width:"100%",padding:"0.75rem",borderRadius:"10px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.85rem",cursor:"pointer",fontFamily:"inherit"}}>
+                📋 Historie ansehen ({sessionHistory.length} Sessions)
+              </button>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {/* KI Auswertung */}
-      {kiLoading&&<div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem",color:"#94a3b8"}}>KI analysiert deine Ergebnisse…</div>}
-      {kiEval&&<div style={{padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem"}}>
-        <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.75rem"}}>KI-Auswertung</div>
-        <div style={{color:"#e2e8f0",fontSize:"0.9rem"}}>{renderMarkdown(kiEval)}</div>
-      </div>}
-
-      {/* Buttons */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"0.75rem"}}>
-        <button onClick={()=>{setHistory([]);setPhase("question");setTask(version==="ipv4"?generateIPv4Task():generateIPv6Task());setAnswer("");setChecked(false);setIsCorrect(false);setStreak(0);setKiEval(null);setTimeout(()=>inputRef.current?.focus(),80);}}
-          style={{padding:"0.85rem",borderRadius:"10px",background:"#0c0c0c",border:"1px solid #2a2a2a",color:"#aaa",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
-          Nochmal ({questionCount} Fragen)
-        </button>
-        <button onClick={resetAll}
-          style={{padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
-          Neue Session
-        </button>
-      </div>
-      <button onClick={()=>setPhase("history")}
-        style={{width:"100%",padding:"0.75rem",borderRadius:"10px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.85rem",cursor:"pointer",fontFamily:"inherit"}}>
-        Historie ansehen ({sessionHistory.length} Sessions)
-      </button>
-    </div>
-  );
- })()}
+          );
+        })()}
 
         {/* ── HISTORY ── */}
         {phase==="history"&&(
