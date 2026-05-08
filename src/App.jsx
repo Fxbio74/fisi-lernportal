@@ -2223,7 +2223,62 @@ function LoginScreen({ onLogin }) {
       </button>
     </div>
   );
-})()}
+ })()}
+
+        {/* ── HISTORY ── */}
+        {phase==="history"&&(
+          <div style={{maxWidth:"700px",margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.5rem"}}>
+              <h2 style={{margin:0,color:"#f1f5f9"}}>Trainings-Historie</h2>
+              <button onClick={()=>setPhase("setup")} style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"1px solid #334155",background:"#1e293b",color:"#94a3b8",cursor:"pointer"}}>← Zurück</button>
+            </div>
+            {sessionHistory.length===0&&<p style={{color:"#64748b",textAlign:"center"}}>Noch keine Sessions gespeichert.</p>}
+            {sessionHistory.map((s,i)=>(
+              <div key={i} style={{marginBottom:"1rem",borderRadius:"12px",border:"1px solid #1e293b",background:"#0f172a",overflow:"hidden"}}>
+                <div onClick={()=>setHistoryOpen(historyOpen===i?null:i)}
+                  style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"1rem 1.25rem",cursor:"pointer",background:"#1e293b"}}>
+                  <div>
+                    <span style={{fontWeight:"bold",color:s.note.color,fontSize:"1.1rem"}}>Note {s.note.note} – {s.note.label}</span>
+                    <span style={{marginLeft:"1rem",color:"#94a3b8",fontSize:"0.85rem"}}>{s.version?.toUpperCase()} · {s.correct}/{s.total} · {s.pct}%</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:"1rem"}}>
+                    <span style={{color:"#475569",fontSize:"0.8rem"}}>{new Date(s.date).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+                    <span style={{color:"#475569"}}>{historyOpen===i?"▲":"▼"}</span>
+                  </div>
+                </div>
+                {historyOpen===i&&(
+                  <div style={{padding:"1rem 1.25rem"}}>
+                    {s.questions.map((q,j)=>(
+                      <div key={j} style={{marginBottom:"0.75rem",padding:"0.75rem",borderRadius:"8px",background:q.isCorrect?"#0a2e1a":"#2e0a0a",border:`1px solid ${q.isCorrect?"#22c55e33":"#ef444433"}`}}>
+                        <div style={{fontSize:"0.8rem",color:"#64748b",marginBottom:"0.25rem"}}>Frage {j+1}</div>
+                        <div style={{color:"#e2e8f0",marginBottom:"0.4rem",fontSize:"0.85rem",whiteSpace:"pre-wrap"}}>{q.question}</div>
+                        <div style={{fontSize:"0.85rem"}}>
+                          <span style={{color:"#94a3b8"}}>Deine Antwort: </span>
+                          <span style={{color:q.isCorrect?"#22c55e":"#ef4444"}}>{q.userAnswer||"(keine)"}</span>
+                        </div>
+                        {!q.isCorrect&&<div style={{fontSize:"0.85rem",marginTop:"0.2rem"}}>
+                          <span style={{color:"#94a3b8"}}>Richtige Antwort: </span>
+                          <span style={{color:"#22c55e"}}>{q.answer}</span>
+                        </div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {sessionHistory.length>0&&(
+              <button onClick={()=>{localStorage.removeItem("subnetting_history");setSessionHistory([]);setHistoryOpen(null);}}
+                style={{marginTop:"0.5rem",padding:"0.5rem 1rem",borderRadius:"8px",border:"1px solid #ef444433",background:"transparent",color:"#ef4444",cursor:"pointer",fontSize:"0.85rem"}}>
+                Historie löschen
+              </button>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
