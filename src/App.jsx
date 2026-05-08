@@ -1892,13 +1892,23 @@ function LoginScreen({ onLogin }) {
         return{type,question:`/${e.from}-Netz → /${e.to}-Subnetze\n\nWie viele Subnetze? (Format: 2^XX)`,answer:`2^${e.exp}`,hint:`2^(${e.to}−${e.from}) = 2^${e.exp}`,extra:`2^${e.exp}${e.cnt?" = "+e.cnt+" Subnetze":""}`};
       }
       case "kuerzen":{
-        const full=randomIPv6Full();const compressed=compressIPv6(full);
-        return{type,question:`Vollständig:\n${full}\n\nGekürzte Schreibweise?`,answer:compressed,hint:`1. Führende Nullen entfernen\n2. Längste Nullfolge → :: (nur einmal)`,extra:`→ ${compressed}`};
-      }
-      case "erweitern":{
-        const full=randomIPv6Full();const compressed=compressIPv6(full);
-        return{type,question:`Gekürzt:\n${compressed}\n\nVollständige Schreibweise?\n(8 Gruppen à 4 Hex-Zeichen)`,answer:full,hint:`:: durch fehlende 0000-Gruppen ersetzen`,extra:`→ ${full}`};
-      }
+  const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+  const zStart=Math.floor(Math.random()*5);
+  const zLen=Math.floor(Math.random()*2)+2;
+  for(let i=zStart;i<Math.min(zStart+zLen,8);i++)g[i]="0000";
+  const full=g.join(":");
+  const compressed=compressIPv6(full);
+  return{type,question:`Vollständig:\n${full}\n\nGekürzte Schreibweise?`,answer:compressed,hint:`1. Führende Nullen entfernen\n2. Längste Nullfolge → :: (nur einmal)`,extra:`→ ${compressed}`};
+}
+case "erweitern":{
+  const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+  const zStart=Math.floor(Math.random()*5);
+  const zLen=Math.floor(Math.random()*2)+2;
+  for(let i=zStart;i<Math.min(zStart+zLen,8);i++)g[i]="0000";
+  const full=g.join(":");
+  const compressed=compressIPv6(full);
+  return{type,question:`Gekürzt:\n${compressed}\n\nVollständige Schreibweise?\n(8 Gruppen à 4 Hex-Zeichen)`,answer:full,hint:`:: durch fehlende 0000-Gruppen ersetzen`,extra:`→ ${full}`};
+}
       case "adresstyp":{
         const opts=[
           {ip:"2001:0db8:85a3:0000:0000:8a2e:0370:7334",a:"Global Unicast (GUA)",h:"Beginnt mit 2000::/3"},
