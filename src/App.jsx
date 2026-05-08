@@ -1864,11 +1864,11 @@ function LoginScreen({ onLogin }) {
 
   // ── IPv6 helpers ──
   function compressIPv6(full){
-    let parts=full.split(":").map(g=>g.replace(/^0+/,"")||"0");
-    let best={s:-1,l:0},cur={s:-1,l:0};
-    for(let i=0;i<8;i++){if(parts[i]==="0"){if(cur.s===-1)cur={s:i,l:1};else cur.l++;if(cur.l>best.l)best={...cur};}else cur={s:-1,l:0};}
-    if(best.l>1){const l=parts.slice(0,best.s).join(":");const r=parts.slice(best.s+best.l).join(":");return(l?l+":":"")+":"+(r?":"+r:"");}
-    return parts.join(":");
+  let parts=full.split(":").map(g=>g.replace(/^0+/,"")||"0");
+  let best={s:-1,l:0},cur={s:-1,l:0};
+  for(let i=0;i<8;i++){if(parts[i]==="0"){if(cur.s===-1)cur={s:i,l:1};else cur.l++;if(cur.l>best.l)best={...cur};}else cur={s:-1,l:0};}
+  if(best.l>1){const l=parts.slice(0,best.s).join(":");const r=parts.slice(best.s+best.l).join(":");return l+"::"+r;}
+  return parts.join(":");
   }
   function randomIPv6Full(){ return Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0")).join(":"); }
 
