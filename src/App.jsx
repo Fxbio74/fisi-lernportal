@@ -1784,7 +1784,7 @@ function SubnettingTrainer() {
   }
 
   function generateIPv4Task(){
-    const types=["netzadresse","broadcast","erste_ip","letzte_ip","hostbereich","hosts_nutzbar","adressen_gesamt","cidr_zu_maske","maske_zu_cidr","wildcard","blockgroesse","gleiche_netz","anzahl_subnetze","netzbits_hostbits","binaer_oktet","netzklasse","privat_oeffentlich","apipa_loopback","punkt_zu_punkt"];
+    const types=["netzadresse","broadcast","erste_ip","letzte_ip","hostbereich","hosts_nutzbar","adressen_gesamt","cidr_zu_maske","maske_zu_cidr","wildcard","gleiche_netz","anzahl_subnetze","netzbits_hostbits","binaer_oktet","netzklasse","privat_oeffentlich","apipa_loopback","punkt_zu_punkt"];
     const type=types[Math.floor(Math.random()*types.length)];
     const prefix=Math.floor(Math.random()*23)+8;
     const maskInt=prefixToMaskInt(prefix);
@@ -1811,7 +1811,6 @@ function SubnettingTrainer() {
       case "cidr_zu_maske": return{type,question:`CIDR-Notation: /${prefix}\n\nWie lautet die Subnetzmaske?`,answer:mask,hint:`${prefix} Einsen, dann ${32-prefix} Nullen`,extra:`/${prefix} → ${mask}`};
       case "maske_zu_cidr": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Präfixlänge? (Format: /XX)`,answer:`/${prefix}`,hint:`Zähle die führenden Einsen`,extra:`${mask} → /${prefix}`};
       case "wildcard": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Wildcard-Maske?`,answer:wildcard,hint:`255.255.255.255 XOR Subnetzmaske (alle Bits invertieren)`,extra:`${mask} invertiert = ${wildcard}`};
-      case "blockgroesse": return{type,question:`Präfixlänge:  /${prefix}\n\nWie groß ist die Blockgröße (Schrittweite)?`,answer:String(totalAddr),hint:`2^(32−${prefix}) = 2^${32-prefix}`,extra:`Blockgröße = Gesamtadressen = ${totalAddr}`};
       case "gleiche_netz":{
         const sameNet=Math.random()>0.5;
         const ip2=sameNet?intToIp(networkInt+Math.floor(Math.random()*(broadcastInt-networkInt-1))+1):intToIp((networkInt+totalAddr)>>>0);
@@ -1965,7 +1964,6 @@ function SubnettingTrainer() {
     cidr_zu_maske:        {label:"CIDR → Maske",        color:"#a855f7"},
     maske_zu_cidr:        {label:"Maske → CIDR",        color:"#f97316"},
     wildcard:             {label:"Wildcard-Maske",      color:"#f59e0b"},
-    blockgroesse:         {label:"Blockgröße",          color:"#8b5cf6"},
     gleiche_netz:         {label:"Gleiches Netz?",      color:"#ec4899"},
     anzahl_subnetze:      {label:"Subnetzanzahl",       color:"#eab308"},
     netzbits_hostbits:    {label:"Netz-/Hostbits",      color:"#64748b"},
