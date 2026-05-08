@@ -2064,52 +2064,60 @@ function LoginScreen({ onLogin }) {
         </div>
 
         {/* ── SETUP ── */}
-        {phase==="setup"&&(
-          <div>
-            {/* Protokoll */}
-            <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>1. PROTOKOLL WÄHLEN</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"1.25rem"}}>
-              {[{id:"ipv4",label:"IPv4",icon:"🌐",color:"#3b82f6",sub:"32-Bit · Netzadr · Broadcast · Hosts · Masken"},{id:"ipv6",label:"IPv6",icon:"🔵",color:"#a855f7",sub:"128-Bit · Kürzen · EUI-64 · Adresstypen"}].map(v=>(
-                <button key={v.id} onClick={()=>setVersion(v.id)}
-                  style={{padding:"1.1rem 1rem",background:version===v.id?`${v.color}20`:"#0c0c0c",border:`1px solid ${version===v.id?v.color:"#1e1e1e"}`,borderRadius:"12px",cursor:"pointer",color:version===v.id?v.color:"#555",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
-                  <div style={{fontSize:"1.5rem",marginBottom:"0.4rem"}}>{v.icon}</div>
-                  <div style={{fontSize:"0.95rem",fontWeight:"bold",marginBottom:"0.2rem"}}>{v.label}</div>
-                  <div style={{fontSize:"0.65rem",color:version===v.id?v.color+"aa":"#444"}}>{v.sub}</div>
-                </button>
-              ))}
-            </div>
+{phase==="setup"&&(
+  <div>
+    {/* Protokoll */}
+    <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>1. PROTOKOLL WÄHLEN</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"1.25rem"}}>
+      {[{id:"ipv4",label:"IPv4",icon:"🌐",color:"#3b82f6",sub:"32-Bit · Netzadr · Broadcast · Hosts · Masken"},{id:"ipv6",label:"IPv6",icon:"🔵",color:"#a855f7",sub:"128-Bit · Kürzen · EUI-64 · Adresstypen"}].map(v=>(
+        <button key={v.id} onClick={()=>setVersion(v.id)}
+          style={{padding:"1.1rem 1rem",background:version===v.id?`${v.color}20`:"#0c0c0c",border:`1px solid ${version===v.id?v.color:"#1e1e1e"}`,borderRadius:"12px",cursor:"pointer",color:version===v.id?v.color:"#555",fontFamily:"inherit",textAlign:"left",transition:"all 0.15s"}}>
+          <div style={{fontSize:"1.5rem",marginBottom:"0.4rem"}}>{v.icon}</div>
+          <div style={{fontSize:"0.95rem",fontWeight:"bold",marginBottom:"0.2rem"}}>{v.label}</div>
+          <div style={{fontSize:"0.65rem",color:version===v.id?v.color+"aa":"#444"}}>{v.sub}</div>
+        </button>
+      ))}
+    </div>
 
-            {/* Fragenanzahl */}
-            <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>2. FRAGENANZAHL</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0.5rem",marginBottom:"1.25rem"}}>
-              {[5,10,20,30].map(n=>(
-                <button key={n} onClick={()=>setQuestionCount(n)}
-                  style={{padding:"0.75rem",background:questionCount===n?"#ffffff18":"#0c0c0c",border:`1px solid ${questionCount===n?"#fff":"#1e1e1e"}`,borderRadius:"10px",cursor:"pointer",color:questionCount===n?"#fff":"#555",fontFamily:"'Courier New',monospace",fontSize:"1rem",fontWeight:"bold",transition:"all 0.15s"}}>
-                  {n}
-                </button>
-              ))}
-            </div>
+    {/* Fragenanzahl */}
+    <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.75rem",letterSpacing:"0.05em"}}>2. FRAGENANZAHL</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0.5rem",marginBottom:"1.25rem"}}>
+      {[5,10,20,30].map(n=>(
+        <button key={n} onClick={()=>setQuestionCount(n)}
+          style={{padding:"0.75rem",background:questionCount===n?"#ffffff18":"#0c0c0c",border:`1px solid ${questionCount===n?"#fff":"#1e1e1e"}`,borderRadius:"10px",cursor:"pointer",color:questionCount===n?"#fff":"#555",fontFamily:"'Courier New',monospace",fontSize:"1rem",fontWeight:"bold",transition:"all 0.15s"}}>
+          {n}
+        </button>
+      ))}
+    </div>
 
-            {/* Start */}
-            <button onClick={startSession} disabled={!version||!questionCount}
-              style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:version&&questionCount?"#fff":"#161616",border:"none",color:version&&questionCount?"#000":"#333",fontSize:"0.95rem",fontWeight:"bold",cursor:version&&questionCount?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"1.5rem"}}>
-              {version&&questionCount?`${questionCount} ${version.toUpperCase()}-Fragen starten →`:"Protokoll & Fragenanzahl wählen"}
-            </button>
+    {/* Start */}
+    <button onClick={startSession} disabled={!version||!questionCount}
+      style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:version&&questionCount?"#fff":"#161616",border:"none",color:version&&questionCount?"#000":"#333",fontSize:"0.95rem",fontWeight:"bold",cursor:version&&questionCount?"pointer":"not-allowed",fontFamily:"inherit",marginBottom:"1rem"}}>
+      {version&&questionCount?`${questionCount} ${version.toUpperCase()}-Fragen starten →`:"Protokoll & Fragenanzahl wählen"}
+    </button>
 
-            {/* Formelblatt */}
-            <div style={{padding:"1rem",background:"#0c0c0c",border:"1px solid #181818",borderRadius:"12px"}}>
-              <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>WICHTIGE FORMELN</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem"}}>
-                {[["Netzadresse","IP AND Subnetzmaske"],["Broadcast","Netz OR (NOT Maske)"],["Nutzbare Hosts","2^(32−Prefix) − 2"],["IPv6 Adressen","2^(128−Prefix)"],["Subnetzmaske","/24 = 255.255.255.0"],["Subnetzanzahl","2^(neu − alt)"]].map(([l,f])=>(
-                  <div key={l} style={{padding:"0.5rem 0.65rem",background:"#111",borderRadius:"7px",border:"1px solid #191919"}}>
-                    <div style={{fontSize:"0.6rem",color:"#444",marginBottom:"0.2rem"}}>{l}</div>
-                    <div style={{fontSize:"0.74rem",color:"#777",fontFamily:"'Courier New',monospace"}}>{f}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+    {/* Historie Button */}
+    {sessionHistory.length>0&&(
+      <button onClick={()=>setPhase("history")}
+        style={{width:"100%",padding:"0.75rem",borderRadius:"12px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.88rem",cursor:"pointer",fontFamily:"inherit",marginBottom:"1.5rem"}}>
+        📋 Historie ansehen ({sessionHistory.length} Sessions)
+      </button>
+    )}
+
+    {/* Formelblatt */}
+    <div style={{padding:"1rem",background:"#0c0c0c",border:"1px solid #181818",borderRadius:"12px"}}>
+      <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>WICHTIGE FORMELN</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem"}}>
+        {[["Netzadresse","IP AND Subnetzmaske"],["Broadcast","Netz OR (NOT Maske)"],["Nutzbare Hosts","2^(32−Prefix) − 2"],["IPv6 Adressen","2^(128−Prefix)"],["Subnetzmaske","/24 = 255.255.255.0"],["Subnetzanzahl","2^(neu − alt)"]].map(([l,f])=>(
+          <div key={l} style={{padding:"0.5rem 0.65rem",background:"#111",borderRadius:"7px",border:"1px solid #191919"}}>
+            <div style={{fontSize:"0.6rem",color:"#444",marginBottom:"0.2rem"}}>{l}</div>
+            <div style={{fontSize:"0.74rem",color:"#777",fontFamily:"'Courier New',monospace"}}>{f}</div>
           </div>
-        )}
+        ))}
+      </div>
+    </div>
+  </div>
+)}
 
         {/* ── QUESTION ── */}
         {phase==="question"&&task&&(
