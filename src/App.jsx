@@ -1776,56 +1776,166 @@ function SubnettingTrainer() {
   function ipToInt(ip){ return ip.split(".").map(Number).reduce((a,b)=>((a<<8)|b)>>>0,0)>>>0; }
   function intToIp(n){ return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join("."); }
   function prefixToMaskInt(p){ return p===0?0:(0xFFFFFFFF<<(32-p))>>>0; }
+  function toBin8(n){ return n.toString(2).padStart(8,"0"); }
+  function randomPrivateIp(){
+    const o1=[10,172,192][Math.floor(Math.random()*3)];
+    const o2=o1===172?Math.floor(Math.random()*16)+16:Math.floor(Math.random()*253)+1;
+    return `${o1}.${o2}.${Math.floor(Math.random()*253)+1}.${Math.floor(Math.random()*253)+1}`;
+  }
 
   function generateIPv4Task(){
-    const types=["netzadresse","broadcast","hosts","subnetzmaske","prefix_von_maske","erste_ip","letzte_ip"];
+    const types=["netzadresse","broadcast","erste_ip","letzte_ip","hostbereich","hosts_nutzbar","adressen_gesamt","cidr_zu_maske","maske_zu_cidr","wildcard","blockgroesse","gleiche_netz","anzahl_subnetze","netzbits_hostbits","binaer_oktet","netzklasse","privat_oeffentlich","apipa_loopback","punkt_zu_punkt"];
     const type=types[Math.floor(Math.random()*types.length)];
     const prefix=Math.floor(Math.random()*23)+8;
     const maskInt=prefixToMaskInt(prefix);
     const mask=intToIp(maskInt);
-    const oct1=[10,172,192][Math.floor(Math.random()*3)];
-    const oct2=oct1===172?Math.floor(Math.random()*16)+16:Math.floor(Math.random()*253)+1;
-    const oct3=Math.floor(Math.random()*253)+1;
-    const oct4=Math.floor(Math.random()*253)+1;
-    const hostIp=`${oct1}.${oct2}.${oct3}.${oct4}`;
+    const wildcard=intToIp((~maskInt)>>>0);
+    const hostIp=randomPrivateIp();
     const ipInt=ipToInt(hostIp);
     const networkInt=(ipInt&maskInt)>>>0;
     const broadcastInt=(networkInt|(~maskInt>>>0))>>>0;
     const network=intToIp(networkInt);
     const broadcast=intToIp(broadcastInt);
     const hostCount=Math.pow(2,32-prefix)-2;
+    const totalAddr=Math.pow(2,32-prefix);
     const firstUsable=intToIp(networkInt+1);
     const lastUsable=intToIp(broadcastInt-1);
-    const cfgs={
-      netzadresse:{question:`IP-Adresse:    ${hostIp}\nPräfixlänge:   /${prefix}\n\nWie lautet die Netzadresse?`,answer:network,hint:`IP AND Subnetzmaske\nMaske: ${mask}`,extra:`${hostIp} AND ${mask} = ${network}`},
-      broadcast:{question:`IP-Adresse:    ${hostIp}\nPräfixlänge:   /${prefix}\n\nWie lautet die Broadcast-Adresse?`,answer:broadcast,hint:`Netzadresse OR (NOT Maske)\nNetzadresse: ${network}`,extra:`Broadcast: ${broadcast}`},
-      hosts:{question:`Präfixlänge:   /${prefix}\n\nWie viele nutzbare Hosts sind möglich?`,answer:String(hostCount),hint:`2^(32 − ${prefix}) − 2 = 2^${32-prefix} − 2`,extra:`${Math.pow(2,32-prefix)} − 2 = ${hostCount}`},
-      subnetzmaske:{question:`CIDR-Notation: /${prefix}\n\nWie lautet die Subnetzmaske?`,answer:mask,hint:`${prefix} Einsen, dann ${32-prefix} Nullen im Binärsystem`,extra:`/${prefix} → ${mask}`},
-      prefix_von_maske:{question:`Subnetzmaske:  ${mask}\n\nWie lautet die Präfixlänge? (Format: /XX)`,answer:`/${prefix}`,hint:`Zähle die führenden Einsen der Subnetzmaske`,extra:`${mask} → /${prefix}`},
-      erste_ip:{question:`Netzadresse:   ${network}\nPräfixlänge:   /${prefix}\n\nErste nutzbare Host-IP?`,answer:firstUsable,hint:`Netzadresse + 1`,extra:`${network} + 1 = ${firstUsable}`},
-      letzte_ip:{question:`Netzadresse:   ${network}\nPräfixlänge:   /${prefix}\n\nLetzte nutzbare Host-IP?`,answer:lastUsable,hint:`Broadcast − 1  (Broadcast: ${broadcast})`,extra:`${broadcast} − 1 = ${lastUsable}`},
-    };
-    return{type,...cfgs[type]};
+    switch(type){
+      case "netzadresse": return{type,question:`IP-Adresse:   ${hostIp}\nPräfixlänge:  /${prefix}\n\nWie lautet die Netzadresse?`,answer:network,hint:`IP AND Subnetzmaske\nMaske: ${mask}`,extra:`${hostIp} AND ${mask} = ${network}`};
+      case "broadcast": return{type,question:`IP-Adresse:   ${hostIp}\nPräfixlänge:  /${prefix}\n\nWie lautet die Broadcast-Adresse?`,answer:broadcast,hint:`Netzadresse OR (NOT Maske)\nNetzadresse: ${network}`,extra:`Broadcast: ${broadcast}`};
+      case "erste_ip": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nErste nutzbare Host-IP?`,answer:firstUsable,hint:`Netzadresse + 1`,extra:`${network} + 1 = ${firstUsable}`};
+      case "letzte_ip": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nLetzte nutzbare Host-IP?`,answer:lastUsable,hint:`Broadcast − 1  (Broadcast: ${broadcast})`,extra:`${broadcast} − 1 = ${lastUsable}`};
+      case "hostbereich": return{type,question:`Netzadresse:  ${network}\nPräfixlänge:  /${prefix}\n\nWelchen nutzbaren Hostbereich hat das Netz?\n(Format: erste_IP - letzte_IP)`,answer:`${firstUsable} - ${lastUsable}`,hint:`Netzadresse+1 bis Broadcast−1`,extra:`${firstUsable} bis ${lastUsable}`};
+      case "hosts_nutzbar": return{type,question:`Präfixlänge:  /${prefix}\n\nWie viele nutzbare Hosts sind möglich?`,answer:String(hostCount),hint:`2^(32−${prefix}) − 2 = 2^${32-prefix} − 2`,extra:`${totalAddr} − 2 = ${hostCount}`};
+      case "adressen_gesamt": return{type,question:`Präfixlänge:  /${prefix}\n\nWie viele Adressen (gesamt) enthält das Netz?\n(inkl. Netz- und Broadcastadresse)`,answer:String(totalAddr),hint:`2^(32−${prefix}) = 2^${32-prefix}`,extra:`Inkl. Netzadresse und Broadcast`};
+      case "cidr_zu_maske": return{type,question:`CIDR-Notation: /${prefix}\n\nWie lautet die Subnetzmaske?`,answer:mask,hint:`${prefix} Einsen, dann ${32-prefix} Nullen`,extra:`/${prefix} → ${mask}`};
+      case "maske_zu_cidr": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Präfixlänge? (Format: /XX)`,answer:`/${prefix}`,hint:`Zähle die führenden Einsen`,extra:`${mask} → /${prefix}`};
+      case "wildcard": return{type,question:`Subnetzmaske: ${mask}\n\nWie lautet die Wildcard-Maske?`,answer:wildcard,hint:`255.255.255.255 XOR Subnetzmaske (alle Bits invertieren)`,extra:`${mask} invertiert = ${wildcard}`};
+      case "blockgroesse": return{type,question:`Präfixlänge:  /${prefix}\n\nWie groß ist die Blockgröße (Schrittweite)?`,answer:String(totalAddr),hint:`2^(32−${prefix}) = 2^${32-prefix}`,extra:`Blockgröße = Gesamtadressen = ${totalAddr}`};
+      case "gleiche_netz":{
+        const sameNet=Math.random()>0.5;
+        const ip2=sameNet?intToIp(networkInt+Math.floor(Math.random()*(broadcastInt-networkInt-1))+1):intToIp((networkInt+totalAddr)>>>0);
+        const net2=(ipToInt(ip2)&maskInt)>>>0;
+        const ans=networkInt===net2?"Ja":"Nein";
+        return{type,question:`IP 1: ${hostIp}\nIP 2: ${ip2}\nPräfixlänge: /${prefix}\n\nLiegen beide IPs im selben Netz? (Ja/Nein)`,answer:ans,hint:`Netz von IP1: ${network}\nNetz von IP2: ${intToIp(net2)}`,extra:`${hostIp} → ${network}\n${ip2} → ${intToIp(net2)}`};
+      }
+      case "anzahl_subnetze":{
+        const op=Math.floor(Math.random()*15)+8;
+        const np=op+Math.floor(Math.random()*4)+1;
+        if(np>30) return generateIPv4Task();
+        const count=Math.pow(2,np-op);
+        return{type,question:`Ursprüngliches Netz: /${op}\nNeue Präfixlänge:    /${np}\n\nWie viele Subnetze entstehen?`,answer:String(count),hint:`2^(${np}−${op}) = 2^${np-op}`,extra:`2^${np-op} = ${count} Subnetze`};
+      }
+      case "netzbits_hostbits": return{type,question:`Präfixlänge: /${prefix}\n\nWie viele Netz- und wie viele Hostbits gibt es?\n(Format: XX Netzbits, XX Hostbits)`,answer:`${prefix} Netzbits, ${32-prefix} Hostbits`,hint:`Netzbits = Präfixlänge / Hostbits = 32 − Präfixlänge`,extra:`/${prefix} → ${prefix} Netzbits, ${32-prefix} Hostbits`};
+      case "binaer_oktet":{
+        const oct=Math.floor(Math.random()*254)+1;
+        return{type,question:`Dezimalwert: ${oct}\n\nWie lautet die 8-Bit-Binärdarstellung dieses Oktetts?`,answer:toBin8(oct),hint:`Stellenwerte: 128 · 64 · 32 · 16 · 8 · 4 · 2 · 1`,extra:`${oct} = ${toBin8(oct)}`};
+      }
+      case "netzklasse":{
+        const cls=[{ip:"10.0.0.1",c:"A"},{ip:"172.16.5.1",c:"B"},{ip:"192.168.1.1",c:"C"},{ip:"224.0.0.5",c:"D (Multicast)"},{ip:"127.0.0.1",c:"Loopback"}];
+        const e=cls[Math.floor(Math.random()*cls.length)];
+        return{type,question:`IP-Adresse: ${e.ip}\n\nWelcher Netzklasse gehört diese IP an?`,answer:e.c,hint:`A: 1–126 · B: 128–191 · C: 192–223 · D: 224–239 · Loopback: 127`,extra:`${e.ip.split(".")[0]}.x → Klasse ${e.c}`};
+      }
+      case "privat_oeffentlich":{
+        const ex=[{ip:"10.5.3.1",a:"Privat"},{ip:"172.20.1.1",a:"Privat"},{ip:"192.168.100.5",a:"Privat"},{ip:"8.8.8.8",a:"Öffentlich"},{ip:"1.1.1.1",a:"Öffentlich"},{ip:"203.0.113.5",a:"Öffentlich"}];
+        const e=ex[Math.floor(Math.random()*ex.length)];
+        return{type,question:`IP-Adresse: ${e.ip}\n\nIst diese IP privat oder öffentlich? (Privat/Öffentlich)`,answer:e.a,hint:`Privat: 10.0.0.0/8 · 172.16.0.0/12 · 192.168.0.0/16`,extra:`${e.ip} → ${e.a}`};
+      }
+      case "apipa_loopback":{
+        const ex=[{ip:"169.254.10.5",a:"APIPA"},{ip:"127.0.0.1",a:"Loopback"},{ip:"127.5.0.1",a:"Loopback"},{ip:"169.254.255.1",a:"APIPA"},{ip:"192.168.1.1",a:"Weder"}];
+        const e=ex[Math.floor(Math.random()*ex.length)];
+        return{type,question:`IP-Adresse: ${e.ip}\n\nHandelt es sich um APIPA, Loopback oder keines von beiden?`,answer:e.a,hint:`APIPA: 169.254.0.0/16 (kein DHCP)\nLoopback: 127.0.0.0/8`,extra:`${e.ip} → ${e.a}`};
+      }
+      case "punkt_zu_punkt":{
+        const pfx=[30,31][Math.floor(Math.random()*2)];
+        if(pfx===30) return{type,question:`Punkt-zu-Punkt-Verbindung: /${pfx}\n\nWie viele nutzbare Host-IPs hat dieses Netz?`,answer:"2",hint:`/30: 4 Adressen gesamt − 2 (Netz+Broadcast) = 2 nutzbar`,extra:`/30 → 2 nutzbare Hosts`};
+        return{type,question:`Punkt-zu-Punkt-Verbindung: /${pfx}\n\nWie viele Adressen hat dieses Netz und was ist der Sonderfall?`,answer:"2, kein Broadcast (RFC 3021)",hint:`/31: Sonderfall – beide Adressen als Host nutzbar, kein Broadcast`,extra:`/31 → 2 Adressen, beide nutzbar`};
+      }
+      default: return generateIPv4Task();
+    }
   }
 
+   function expandIPv6Full(addr){
+    let p=addr.split("::");
+    if(p.length===2){const l=p[0]?p[0].split(":"):[];const r=p[1]?p[1].split(":"):[];return[...l,...Array(8-l.length-r.length).fill("0"),...r].map(g=>g.padStart(4,"0")).join(":");}
+    return addr.split(":").map(g=>g.padStart(4,"0")).join(":");
+  }
+  function compressIPv6(full){
+    let parts=full.split(":").map(g=>g.replace(/^0+/,"")||"0");
+    let best={s:-1,l:0},cur={s:-1,l:0};
+    for(let i=0;i<8;i++){if(parts[i]==="0"){if(cur.s===-1)cur={s:i,l:1};else cur.l++;if(cur.l>best.l)best={...cur};}else cur={s:-1,l:0};}
+    if(best.l>1){const l=parts.slice(0,best.s).join(":");const r=parts.slice(best.s+best.l).join(":");return(l?l+":":"")+":"+(r?":"+r:"");}
+    return parts.join(":");
+  }
+  function randomIPv6Full(){return Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0")).join(":");}
+
   function generateIPv6Task(){
-    const types=["netzadresse","hosts","subnetz_anzahl"];
+    const types=["netzadresse","hosts_anzahl","subnetz_anzahl","kuerzen","erweitern","adresstyp","prefix_interface","netzteil_hostteil","eui64","kein_broadcast","zero_compression_regel"];
     const type=types[Math.floor(Math.random()*types.length)];
-    if(type==="netzadresse"){
-      const groups=Math.floor(Math.random()*5)+2;
-      const prefix=groups*16;
-      const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
-      const ip=g.join(":");
-      const net=[...g.slice(0,groups),...Array(8-groups).fill("0000")].join(":");
-      return{type,question:`IPv6-Adresse:  ${ip}\nPräfixlänge:   /${prefix}\n\nWie lautet die Netzadresse?\n(Alle 8 Gruppen, z.B. xxxx:...:0000)`,answer:net,hint:`Die ersten ${groups} Gruppen (/${prefix}) bleiben, der Rest wird 0000`,extra:`/${prefix} → ${groups} Gruppen behalten, ${8-groups}× 0000`};
-    } else if(type==="hosts"){
-      const prefix=(Math.floor(Math.random()*7)+1)*16;
-      const exp=128-prefix;
-      return{type,question:`IPv6-Präfixlänge: /${prefix}\n\nWie viele Adressen gibt es in diesem Netz?\n(Format: 2^XX)`,answer:`2^${exp}`,hint:`2^(128 − ${prefix}) = 2^${exp}`,extra:`128 − ${prefix} = ${exp} → 2^${exp} Adressen`};
-    } else {
-      const examples=[{from:48,to:64,exp:16,cnt:"65.536"},{from:64,to:80,exp:16,cnt:"65.536"},{from:32,to:48,exp:16,cnt:"65.536"},{from:48,to:56,exp:8,cnt:"256"},{from:56,to:64,exp:8,cnt:"256"}];
-      const ex=examples[Math.floor(Math.random()*examples.length)];
-      return{type,question:`Ein IPv6-Netz /${ex.from} wird in /${ex.to}-Subnetze aufgeteilt.\n\nWie viele Subnetze entstehen?\n(Format: 2^XX)`,answer:`2^${ex.exp}`,hint:`2^(${ex.to} − ${ex.from}) = 2^${ex.exp}`,extra:`2^${ex.exp} = ${ex.cnt} Subnetze`};
+    switch(type){
+      case "netzadresse":{
+        const groups=Math.floor(Math.random()*5)+2;
+        const prefix=groups*16;
+        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+        const net=[...g.slice(0,groups),...Array(8-groups).fill("0000")].join(":");
+        return{type,question:`IPv6-Adresse: ${g.join(":")}\nPräfixlänge:  /${prefix}\n\nWie lautet die Netzadresse?\n(Alle 8 Gruppen mit Doppelpunkten)`,answer:net,hint:`Erste ${groups} Gruppen bleiben, Rest wird 0000`,extra:`/${prefix} → ${groups} Gruppen behalten`};
+      }
+      case "hosts_anzahl":{
+        const prefix=(Math.floor(Math.random()*7)+1)*16;
+        const exp=128-prefix;
+        return{type,question:`IPv6-Präfixlänge: /${prefix}\n\nWie viele Adressen enthält dieses Netz?\n(Format: 2^XX)`,answer:`2^${exp}`,hint:`2^(128−${prefix}) = 2^${exp}`,extra:`128−${prefix} = ${exp}`};
+      }
+      case "subnetz_anzahl":{
+        const ex=[{from:48,to:64,exp:16,cnt:"65.536"},{from:64,to:80,exp:16},{from:32,to:48,exp:16},{from:48,to:56,exp:8,cnt:"256"},{from:56,to:64,exp:8},{from:48,to:52,exp:4,cnt:"16"}];
+        const e=ex[Math.floor(Math.random()*ex.length)];
+        return{type,question:`Ein /${e.from}-Netz wird in /${e.to}-Subnetze aufgeteilt.\n\nWie viele Subnetze entstehen?\n(Format: 2^XX)`,answer:`2^${e.exp}`,hint:`2^(${e.to}−${e.from}) = 2^${e.exp}`,extra:`2^${e.exp}${e.cnt?" = "+e.cnt+" Subnetze":""}`};
+      }
+      case "kuerzen":{
+        const full=randomIPv6Full();
+        const compressed=compressIPv6(full);
+        return{type,question:`Vollständige IPv6-Adresse:\n${full}\n\nGekürzte Schreibweise?`,answer:compressed,hint:`1. Führende Nullen in jeder Gruppe entfernen\n2. Längste Nullfolge durch :: ersetzen (nur einmal erlaubt)`,extra:`→ ${compressed}`};
+      }
+      case "erweitern":{
+        const full=randomIPv6Full();
+        const compressed=compressIPv6(full);
+        return{type,question:`Gekürzte IPv6-Adresse:\n${compressed}\n\nVollständige Schreibweise?\n(8 Gruppen à 4 Hex-Zeichen)`,answer:full,hint:`:: durch fehlende 0000-Gruppen ersetzen, führende Nullen auffüllen`,extra:`→ ${full}`};
+      }
+      case "adresstyp":{
+        const opts=[
+          {ip:"2001:0db8:85a3:0000:0000:8a2e:0370:7334",a:"Global Unicast (GUA)",h:"Beginnt mit 2000::/3"},
+          {ip:"fe80:0000:0000:0000:0202:b3ff:fe1e:8329",a:"Link-Local",h:"Beginnt mit fe80::/10"},
+          {ip:"fc00:0000:0000:0001:0000:0000:0000:0001",a:"Unique Local (ULA)",h:"fc00::/7 (fc oder fd)"},
+          {ip:"ff02:0000:0000:0000:0000:0000:0000:0001",a:"Multicast",h:"Beginnt mit ff00::/8"},
+          {ip:"0000:0000:0000:0000:0000:0000:0000:0001",a:"Loopback",h:"::1 ist der IPv6-Loopback"},
+          {ip:"fd12:3456:789a:0001:0000:0000:0000:0001",a:"Unique Local (ULA)",h:"fd... ist ULA"},
+        ];
+        const e=opts[Math.floor(Math.random()*opts.length)];
+        return{type,question:`IPv6-Adresse: ${compressIPv6(e.ip)}\n\nWelcher Adresstyp?\n(GUA / Link-Local / ULA / Multicast / Loopback)`,answer:e.a,hint:e.h,extra:`→ ${e.a}`};
+      }
+      case "prefix_interface":{
+        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+        const iid=g.slice(4).join(":");
+        return{type,question:`IPv6-Adresse: ${g.join(":")}\nPräfixlänge:  /64\n\nWie lautet die Interface-ID?\n(Format: xxxx:xxxx:xxxx:xxxx)`,answer:iid,hint:`Bei /64: die hinteren 64 Bit (Gruppen 5–8) sind die Interface-ID`,extra:`Gruppen 5–8: ${iid}`};
+      }
+      case "netzteil_hostteil":{
+        const groups=Math.floor(Math.random()*4)+2;
+        const prefix=groups*16;
+        const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+        const netteil=g.slice(0,groups).join(":");
+        return{type,question:`IPv6-Adresse: ${g.join(":")}\nPräfixlänge:  /${prefix}\n\nWelche Gruppen bilden den Netzanteil?\n(Format: die ersten X Gruppen)`,answer:netteil,hint:`/${prefix} = erste ${groups} Gruppen (${prefix} Bit) sind Netzanteil`,extra:`Netzanteil: ${netteil}\nHostanteil: ${g.slice(groups).join(":")}`};
+      }
+      case "eui64":{
+        const mb=Array.from({length:6},()=>Math.floor(Math.random()*256));
+        const mac=mb.map(b=>b.toString(16).padStart(2,"0")).join(":");
+        const b0=(mb[0]^0x02).toString(16).padStart(2,"0");
+        const eui=`${b0}${mb[1].toString(16).padStart(2,"0")}:${mb[2].toString(16).padStart(2,"0")}ff:fe${mb[3].toString(16).padStart(2,"0")}:${mb[4].toString(16).padStart(2,"0")}${mb[5].toString(16).padStart(2,"0")}`;
+        return{type,question:`MAC-Adresse: ${mac}\n\nWie lautet die EUI-64 Interface-ID?\n(Format: XXXX:XXFF:FEXX:XXXX)`,answer:eui,hint:`1. MAC halbieren\n2. FF:FE in die Mitte\n3. 7. Bit des 1. Bytes invertieren (U/L-Bit XOR 0x02)`,extra:`${mac} → ${eui}`};
+      }
+      case "kein_broadcast":
+        return{type,question:`IPv4 verwendet Broadcast-Adressen.\n\nWas nutzt IPv6 stattdessen für die Kommunikation\nmit mehreren Hosts gleichzeitig?`,answer:"Multicast",hint:`IPv6 kennt keinen Broadcast. Stattdessen Multicast-Gruppen\n(z.B. ff02::1 = alle Nodes im Link)`,extra:`IPv6: Multicast statt Broadcast`};
+      case "zero_compression_regel":
+        return{type,question:`Warum darf :: in einer IPv6-Adresse nur einmal vorkommen?\n(Stichwort)`,answer:"Eindeutigkeit",hint:`Mehrfaches :: wäre nicht eindeutig auflösbar –\nunklar wie viele Nullgruppen wo gemeint sind`,extra:`:: nur einmal → Adresse eindeutig`};
+      default: return generateIPv6Task();
     }
   }
 
@@ -1837,23 +1947,44 @@ function SubnettingTrainer() {
 
   function checkAnswer(){
     if(!answer.trim()||checked)return;
-    const norm=s=>s.trim().toLowerCase().replace(/\s+/g,"");
-    const ok=norm(answer)===norm(task.answer);
+    const norm=s=>s.trim().toLowerCase().replace(/\s+/g," ").replace(/\s*-\s*/g," - ");
+    const u=norm(answer); const c=norm(task.answer);
+    const ok=u===c||c.startsWith(u)&&u.length>3;
     setIsCorrect(ok);setChecked(true);setTotal(t=>t+1);
     if(ok){setStreak(s=>s+1);setCorrectCount(c=>c+1);}else{setStreak(0);}
   }
 
-  const taskMeta={
-    netzadresse:     {label:"Netzadresse",        color:"#3b82f6"},
-    broadcast:       {label:"Broadcast",           color:"#ef4444"},
-    hosts:           {label:"Anzahl Hosts",        color:"#22c55e"},
-    subnetzmaske:    {label:"Subnetzmaske",        color:"#a855f7"},
-    prefix_von_maske:{label:"Präfixlänge",         color:"#f97316"},
-    erste_ip:        {label:"Erste nutzbare IP",   color:"#38bdf8"},
-    letzte_ip:       {label:"Letzte nutzbare IP",  color:"#fb923c"},
-    subnetz_anzahl:  {label:"Subnetzanzahl",       color:"#eab308"},
+   const taskMeta={
+    netzadresse:          {label:"Netzadresse",        color:"#3b82f6"},
+    broadcast:            {label:"Broadcast",           color:"#ef4444"},
+    erste_ip:             {label:"Erste Host-IP",       color:"#38bdf8"},
+    letzte_ip:            {label:"Letzte Host-IP",      color:"#fb923c"},
+    hostbereich:          {label:"Hostbereich",         color:"#06b6d4"},
+    hosts_nutzbar:        {label:"Nutzbare Hosts",      color:"#22c55e"},
+    adressen_gesamt:      {label:"Gesamtadressen",      color:"#84cc16"},
+    cidr_zu_maske:        {label:"CIDR → Maske",        color:"#a855f7"},
+    maske_zu_cidr:        {label:"Maske → CIDR",        color:"#f97316"},
+    wildcard:             {label:"Wildcard-Maske",      color:"#f59e0b"},
+    blockgroesse:         {label:"Blockgröße",          color:"#8b5cf6"},
+    gleiche_netz:         {label:"Gleiches Netz?",      color:"#ec4899"},
+    anzahl_subnetze:      {label:"Subnetzanzahl",       color:"#eab308"},
+    netzbits_hostbits:    {label:"Netz-/Hostbits",      color:"#64748b"},
+    binaer_oktet:         {label:"Binär-Oktet",         color:"#0ea5e9"},
+    netzklasse:           {label:"Netzklasse",          color:"#d946ef"},
+    privat_oeffentlich:   {label:"Privat/Öffentlich",   color:"#10b981"},
+    apipa_loopback:       {label:"APIPA/Loopback",      color:"#f43f5e"},
+    punkt_zu_punkt:       {label:"P2P-Netz (/30-/31)",  color:"#6366f1"},
+    hosts_anzahl:         {label:"Adressen IPv6",       color:"#22c55e"},
+    subnetz_anzahl:       {label:"Subnetzanzahl IPv6",  color:"#eab308"},
+    kuerzen:              {label:"IPv6 kürzen",         color:"#3b82f6"},
+    erweitern:            {label:"IPv6 erweitern",      color:"#8b5cf6"},
+    adresstyp:            {label:"Adresstyp",           color:"#a855f7"},
+    prefix_interface:     {label:"Interface-ID",        color:"#f97316"},
+    netzteil_hostteil:    {label:"Netz-/Hostanteil",    color:"#06b6d4"},
+    eui64:                {label:"EUI-64",              color:"#f59e0b"},
+    kein_broadcast:       {label:"Kein Broadcast",      color:"#ef4444"},
+    zero_compression_regel:{label:":: Regel",           color:"#64748b"},
   };
-
   return(
     <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center"}}>
       <div style={{padding:"1.5rem",maxWidth:"650px",width:"100%"}}>
