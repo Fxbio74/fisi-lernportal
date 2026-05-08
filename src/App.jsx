@@ -350,6 +350,31 @@ function PruefungsGenerator({ items }) {
   const [zeitLimit, setZeitLimit] = useState(0);
   const [timeLeft, setTimeLeft] = useState(null);
   const timerRef = useRef(null);
+  const [pruefKiEval,setPruefKiEval]=useState(null);
+  const [pruefKiLoading,setPruefKiLoading]=useState(false);
+
+  function calcNoteLinear(correct,total){
+    if(total===0)return{note:6,label:"Ungenügend",color:"#7f1d1d"};
+    const note=Math.min(6,Math.max(1,Math.round((1+5*(1-correct/total))*10)/10));
+    let label,color;
+    if(note<2){label="Sehr gut";color="#22c55e";}
+    else if(note<3){label="Gut";color="#84cc16";}
+    else if(note<4){label="Befriedigend";color="#eab308";}
+    else if(note<5){label="Ausreichend";color="#f97316";}
+    else if(note<6){label="Mangelhaft";color="#ef4444";}
+    else{label="Ungenügend";color="#7f1d1d";}
+    return{note,label,color};
+  }
+
+  const fetchPruefKiEval=async(mcs,mcTotal)=>{
+    setPruefKiLoading(true);
+    const n=calcNoteLinear(mcs,mcTotal);
+    const pct=mcTotal>0?Math.round(mcs/mcTotal*100):0;
+    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
+    const content=`Ich habe eine FISI-Prüfung (${schwierigkeit}) abgegeben: ${mcs}/${mcTotal} MC-Fragen richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Konkrete Lerntipps für die IHK-Prüfung`;
+    try{const r=await callKI([{role:"user",content}],system);setPruefKiEval(r);}catch(e){}
+    setPruefKiLoading(false);
+  };
 
   useEffect(() => {
     if (step === "pruefung" && zeitLimit > 0) {
@@ -404,7 +429,7 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
       const reply = await callKI([{role:"user",content:userMsg}], systemPrompt);
       const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed = JSON.parse(clean);
-      setQuestions(parsed); setAnswers({}); setSubmitted(false); setShowLoesung(false); setStep("pruefung");
+      setQuestions(parsed); setAnswers({}); setSubmitted(false); setShowLoesung(false); setPruefKiEval(null); setStep("pruefung");
     } catch(e) {
       alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
       setStep("config");
@@ -525,16 +550,27 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
             <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
               {submitted&&<button onClick={()=>setShowLoesung(l=>!l)} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:showLoesung?"#1a2a3a":"#0f0f0f",border:"1px solid #2a3a4a",color:"#60a5fa",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>{showLoesung?"Lösung ausblenden":"Lösung anzeigen"}</button>}
               {submitted&&<button onClick={()=>exportPruefungPDF(pruefungTitle,questions,answers,submitted,showLoesung)} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:"none",border:"1px solid #3a1a1a",color:"#ef4444",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="pdf" size={13}/>PDF Export</button>}
-              <button onClick={()=>{setStep("config");setQuestions([]);setAnswers({});setSubmitted(false);}} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:"#0f0f0f",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>← Neue Prüfung</button>
+              <button onClick={()=>{setStep("config");setQuestions([]);setAnswers({});setSubmitted(false);setPruefKiEval(null);}} style={{padding:"0.5rem 0.9rem",borderRadius:"8px",background:"#0f0f0f",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit",fontSize:"0.8rem"}}>← Neue Prüfung</button>
             </div>
           </div>
-          {submitted&&(
-            <div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:mcPercent>=80?"#0a2e1a":mcPercent>=50?"#2e2a00":"#2e0a0a",border:`1px solid ${mcPercent>=80?"#22c55e":mcPercent>=50?"#eab308":"#ef4444"}`}}>
-              <div style={{fontSize:"2.2rem",fontWeight:"bold",color:mcPercent>=80?"#22c55e":mcPercent>=50?"#eab308":"#ef4444"}}>{mcScore}/{mcQuestions.length} MC-Fragen</div>
-              <div style={{fontSize:"1rem",color:mcPercent>=80?"#22c55e":mcPercent>=50?"#eab308":"#ef4444",marginTop:"0.3rem"}}>{mcPercent}% · {mcPercent>=80?"Bestanden ✓":mcPercent>=50?"Knapp ⚠️":"Nicht bestanden ✗"}</div>
-              {questions.some(q=>q.type==="text")&&<div style={{fontSize:"0.8rem",color:"#888",marginTop:"0.5rem"}}>Freitext-Fragen: Vergleiche deine Antworten mit den Musterpunkten</div>}
-            </div>
-          )}
+
+          {submitted&&(()=>{
+            const n=calcNoteLinear(mcScore,mcQuestions.length);
+            return(
+              <div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:"#0f172a",border:`2px solid ${n.color}`}}>
+                <div style={{fontSize:"4rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
+                <div style={{fontSize:"1.3rem",color:n.color,marginTop:"0.4rem"}}>{n.label}</div>
+                <div style={{color:"#94a3b8",marginTop:"0.5rem",fontSize:"1rem"}}>{mcScore}/{mcQuestions.length} MC-Fragen · {mcPercent}%</div>
+                {questions.some(q=>q.type==="text")&&<div style={{fontSize:"0.8rem",color:"#888",marginTop:"0.5rem"}}>Freitext-Fragen: Vergleiche deine Antworten mit den Musterpunkten</div>}
+                {pruefKiLoading&&<div style={{marginTop:"1rem",color:"#94a3b8",fontSize:"0.85rem"}}>KI analysiert deine Prüfung…</div>}
+                {pruefKiEval&&<div style={{marginTop:"1rem",padding:"1rem",background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:"10px",textAlign:"left"}}>
+                  <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.5rem",fontSize:"0.85rem"}}>KI-Auswertung</div>
+                  <div style={{color:"#e2e8f0",fontSize:"0.82rem"}}>{renderMarkdown(pruefKiEval)}</div>
+                </div>}
+              </div>
+            );
+          })()}
+
           {questions.map((q,i)=>{
             const ismc=q.type==="mc";
             const isCorrect=submitted&&ismc&&answers[i]===q.correct;
@@ -589,6 +625,7 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                   h.unshift({date:new Date().toISOString(),title:pruefungTitle,total:questions.length,mcTotal:mc.length,mcScore:mcs,percent:mc.length>0?Math.round((mcs/mc.length)*100):0,schwierigkeit});
                   localStorage.setItem("fisi_pruef_history",JSON.stringify(h.slice(0,50)));
                   setSubmitted(true);
+                  fetchPruefKiEval(mcs,mc.length);
                 }} disabled={!allAnswered} style={{padding:"0.85rem 2rem",borderRadius:"10px",background:allAnswered?"#22c55e":"#1a1a1a",border:"none",color:allAnswered?"#000":"#444",fontSize:"0.95rem",fontWeight:"bold",cursor:allAnswered?"pointer":"not-allowed",fontFamily:"inherit"}}>
                   {allAnswered?"Prüfung abgeben ✓":`Noch ${questions.length-Object.keys(answers).length} offen`}
                 </button>
@@ -674,13 +711,39 @@ function AbfrageSession({ items, selCats, anzahl, onBack }) {
   const [score, setScore] = useState({ correct:0, wrong:0 });
   const [done, setDone] = useState(false);
   const [wrongQuestions, setWrongQuestions] = useState([]);
+  const [abfrageKiEval,setAbfrageKiEval]=useState(null);
+  const [abfrageKiLoading,setAbfrageKiLoading]=useState(false);
   const textareaRef = useRef();
+
+  function calcNoteLinear(correct,total){
+    if(total===0)return{note:6,label:"Ungenügend",color:"#7f1d1d"};
+    const note=Math.min(6,Math.max(1,Math.round((1+5*(1-correct/total))*10)/10));
+    let label,color;
+    if(note<2){label="Sehr gut";color="#22c55e";}
+    else if(note<3){label="Gut";color="#84cc16";}
+    else if(note<4){label="Befriedigend";color="#eab308";}
+    else if(note<5){label="Ausreichend";color="#f97316";}
+    else if(note<6){label="Mangelhaft";color="#ef4444";}
+    else{label="Ungenügend";color="#7f1d1d";}
+    return{note,label,color};
+  }
+
+  const fetchAbfrageKiEval=async(correct,total)=>{
+    setAbfrageKiLoading(true);
+    const n=calcNoteLinear(correct,total);
+    const pct=total>0?Math.round(correct/total*100):0;
+    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
+    const content=`Ich habe ${total} Abfragefragen bearbeitet: ${correct}/${total} richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nThemen: ${selCats.length>0?selCats.join(", "):"Alle Kategorien"}\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Lerntipps für die IHK-Prüfung`;
+    try{const r=await callKI([{role:"user",content}],system);setAbfrageKiEval(r);}catch(e){}
+    setAbfrageKiLoading(false);
+  };
 
   useEffect(() => {
     if (done) {
       const h = JSON.parse(localStorage.getItem("fisi_abfrage_history")||"[]");
       h.unshift({date:new Date().toISOString(), correct:score.correct, wrong:score.wrong, total:score.correct+score.wrong, cats:selCats});
       localStorage.setItem("fisi_abfrage_history", JSON.stringify(h.slice(0,50)));
+      fetchAbfrageKiEval(score.correct, score.correct+score.wrong);
     }
   }, [done]);
 
@@ -765,28 +828,37 @@ function AbfrageSession({ items, selCats, anzahl, onBack }) {
   if (done) {
     const total = score.correct + score.wrong;
     const pct = total>0 ? Math.round((score.correct/total)*100) : 0;
+    const n = calcNoteLinear(score.correct, total);
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
-        <div style={{maxWidth:"500px",width:"100%",textAlign:"center"}}>
+        <div style={{maxWidth:"560px",width:"100%",textAlign:"center"}}>
           <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{pct>=80?"🏆":pct>=50?"💪":"📚"}</div>
-          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.5rem",fontWeight:"bold",color:"#fff",marginBottom:"0.5rem"}}>Abfrage beendet!</div>
-          <div style={{padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:pct>=80?"#0a2e1a":pct>=50?"#2e2a00":"#1a1a1a",border:`1px solid ${pct>=80?"#22c55e":pct>=50?"#eab308":"#2a2a2a"}`}}>
-            <div style={{fontSize:"3rem",fontWeight:"bold",color:pct>=80?"#22c55e":pct>=50?"#eab308":"#888"}}>{score.correct}/{total}</div>
-            <div style={{fontSize:"1.1rem",color:pct>=80?"#22c55e":pct>=50?"#eab308":"#888",marginTop:"0.3rem"}}>{pct}% richtig beantwortet</div>
+          <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.5rem",fontWeight:"bold",color:"#fff",marginBottom:"1rem"}}>Abfrage beendet!</div>
+
+          <div style={{padding:"1.5rem",borderRadius:"16px",background:"#0f172a",border:`2px solid ${n.color}`,marginBottom:"1.25rem"}}>
+            <div style={{fontSize:"4rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
+            <div style={{fontSize:"1.3rem",color:n.color,marginTop:"0.4rem"}}>{n.label}</div>
+            <div style={{color:"#94a3b8",marginTop:"0.5rem",fontSize:"1rem"}}>{score.correct}/{total} richtig · {pct}%</div>
           </div>
+
+          {abfrageKiLoading&&<div style={{padding:"1rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.25rem",color:"#94a3b8",fontSize:"0.9rem"}}>KI analysiert deine Ergebnisse…</div>}
+          {abfrageKiEval&&<div style={{padding:"1.25rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.25rem",textAlign:"left"}}>
+            <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.5rem",fontSize:"0.9rem"}}>KI-Auswertung</div>
+            <div style={{color:"#e2e8f0",fontSize:"0.85rem"}}>{renderMarkdown(abfrageKiEval)}</div>
+          </div>}
+
           {wrongQuestions.length>0&&(
             <div style={{background:"#1a0a0a",border:"1px solid #ef444440",borderRadius:"12px",padding:"1rem 1.25rem",marginBottom:"1.25rem",textAlign:"center"}}>
               <div style={{fontSize:"0.82rem",color:"#ef4444",marginBottom:"0.75rem",fontWeight:"bold"}}>❌ {wrongQuestions.length} Frage{wrongQuestions.length!==1?"n":""} falsch beantwortet</div>
-              <button onClick={()=>{
-                setQuestions(wrongQuestions); setWrongQuestions([]); setQIndex(0); setAnswer("");
-                setFeedback(null); setHint(null); setScore({correct:0,wrong:0}); setDone(false);
-              }} style={{padding:"0.65rem 1.25rem",borderRadius:"10px",background:"#ef4444",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.4rem",margin:"0 auto"}}>
+              <button onClick={()=>{setQuestions(wrongQuestions);setWrongQuestions([]);setQIndex(0);setAnswer("");setFeedback(null);setHint(null);setScore({correct:0,wrong:0});setDone(false);setAbfrageKiEval(null);}}
+                style={{padding:"0.65rem 1.25rem",borderRadius:"10px",background:"#ef4444",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.4rem",margin:"0 auto"}}>
                 <Icon name="repeat" size={14}/>Falsche Fragen wiederholen
               </button>
             </div>
           )}
           <div style={{display:"flex",gap:"0.75rem",justifyContent:"center",flexWrap:"wrap"}}>
-            <button onClick={()=>{setQIndex(0);setAnswer("");setFeedback(null);setHint(null);setScore({correct:0,wrong:0});setWrongQuestions([]);setDone(false);setGenerating(true);generateQuestions();}} style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold"}}>🔄 Neue Abfrage</button>
+            <button onClick={()=>{setQIndex(0);setAnswer("");setFeedback(null);setHint(null);setScore({correct:0,wrong:0});setWrongQuestions([]);setDone(false);setAbfrageKiEval(null);setGenerating(true);generateQuestions();}}
+              style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#3b82f6",border:"none",color:"#fff",cursor:"pointer",fontFamily:"inherit",fontWeight:"bold"}}>🔄 Neue Abfrage</button>
             <button onClick={onBack} style={{padding:"0.75rem 1.5rem",borderRadius:"10px",background:"#0f0f0f",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit"}}>← Zurück</button>
           </div>
         </div>
@@ -819,13 +891,13 @@ function AbfrageSession({ items, selCats, anzahl, onBack }) {
             <div style={{fontSize:"1.05rem",fontWeight:"bold",color:"#eee",lineHeight:1.5}}>❓ {currentQ.question}</div>
           </div>
           <div style={{padding:"1.25rem 1.5rem"}}>
-            {hint && (
+            {hint&&(
               <div style={{background:"#0a1a2e",border:"1px solid #1a3a5a",borderRadius:"10px",padding:"0.9rem 1.1rem",marginBottom:"1rem",display:"flex",gap:"0.75rem"}}>
                 <div style={{flexShrink:0,fontSize:"1.2rem"}}>💡</div>
                 <div style={{fontSize:"0.82rem",color:"#93c5fd",lineHeight:"1.65"}}>{hint}</div>
               </div>
             )}
-            {feedback && (
+            {feedback&&(
               <div style={{borderRadius:"12px",padding:"1rem 1.25rem",marginBottom:"1rem",background:feedback.correct?"#0a2e1a":"#1a0a0a",border:`1px solid ${feedback.correct?"#22c55e":"#ef4444"}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.6rem"}}>
                   <span style={{fontSize:"1.3rem"}}>{feedback.correct?"✅":"❌"}</span>
@@ -877,25 +949,6 @@ function AbfrageModus({ items }) {
   const [anzahl, setAnzahl] = useState(10);
   if (!started) return <AbfrageConfig items={items} onStart={(cats,n)=>{ setSelCats(cats); setAnzahl(n); setStarted(true); }}/>;
   return <AbfrageSession items={items} selCats={selCats} anzahl={anzahl} onBack={()=>setStarted(false)}/>;
-}
-
-function SetupBanner() {
-  return(
-    <div style={{minHeight:"100vh",background:"#070707",display:"flex",alignItems:"center",justifyContent:"center",padding:"2rem"}}>
-      <div style={{maxWidth:"580px",width:"100%",background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:"16px",padding:"2.5rem"}}>
-        <div style={{fontSize:"2.5rem",textAlign:"center",marginBottom:"1rem"}}>⚙️</div>
-        <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.3rem",fontWeight:"bold",color:"#fff",textAlign:"center",marginBottom:"2rem"}}>Supabase Setup nötig</div>
-        <div style={{display:"flex",flexDirection:"column",gap:"1rem"}}>
-          {["1. supabase.com → New Project","2. Project Settings → API → URL + anon key","3. Vercel → Settings → Environment Variables","4. VITE_SUPABASE_URL = deine URL","5. VITE_SUPABASE_ANON_KEY = dein Key","6. Vercel Redeploy"].map((t,i)=>(
-            <div key={i} style={{display:"flex",gap:"1rem",alignItems:"center"}}>
-              <div style={{width:"28px",height:"28px",background:"#2E75B6",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"0.8rem",fontWeight:"bold",color:"#fff"}}>{i+1}</div>
-              <div style={{fontSize:"0.85rem",color:"#aaa"}}>{t}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 }
 // ── Upload Modal ──────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onRefresh }) {
