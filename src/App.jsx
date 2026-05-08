@@ -209,6 +209,7 @@ const Icon = ({ name, size=18 }) => {
     repeat:    <svg width={size} height={size} viewBox="0 0 24 24" {...p}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
     note:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
     card:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="7" y1="15" x2="12" y2="15"/></svg>,
+    subnet:    <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="2" y="2" width="8" height="8" rx="1.5"/><rect x="14" y="2" width="8" height="8" rx="1.5"/><rect x="2" y="14" width="8" height="8" rx="1.5"/><rect x="14" y="14" width="8" height="8" rx="1.5"/><line x1="10" y1="6" x2="14" y2="6"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="10" y1="18" x2="14" y2="18"/></svg>,
   };
   return icons[name]||null;
 };
@@ -1760,6 +1761,211 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+// ── Subnetting Trainer ────────────────────────────────────────────────────────
+function SubnettingTrainer() {
+  const [version,setVersion]=useState(null);
+  const [task,setTask]=useState(null);
+  const [answer,setAnswer]=useState("");
+  const [checked,setChecked]=useState(false);
+  const [isCorrect,setIsCorrect]=useState(false);
+  const [streak,setStreak]=useState(0);
+  const [total,setTotal]=useState(0);
+  const [correctCount,setCorrectCount]=useState(0);
+  const inputRef=useRef();
+
+  function ipToInt(ip){ return ip.split(".").map(Number).reduce((a,b)=>((a<<8)|b)>>>0,0)>>>0; }
+  function intToIp(n){ return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join("."); }
+  function prefixToMaskInt(p){ return p===0?0:(0xFFFFFFFF<<(32-p))>>>0; }
+
+  function generateIPv4Task(){
+    const types=["netzadresse","broadcast","hosts","subnetzmaske","prefix_von_maske","erste_ip","letzte_ip"];
+    const type=types[Math.floor(Math.random()*types.length)];
+    const prefix=Math.floor(Math.random()*23)+8;
+    const maskInt=prefixToMaskInt(prefix);
+    const mask=intToIp(maskInt);
+    const oct1=[10,172,192][Math.floor(Math.random()*3)];
+    const oct2=oct1===172?Math.floor(Math.random()*16)+16:Math.floor(Math.random()*253)+1;
+    const oct3=Math.floor(Math.random()*253)+1;
+    const oct4=Math.floor(Math.random()*253)+1;
+    const hostIp=`${oct1}.${oct2}.${oct3}.${oct4}`;
+    const ipInt=ipToInt(hostIp);
+    const networkInt=(ipInt&maskInt)>>>0;
+    const broadcastInt=(networkInt|(~maskInt>>>0))>>>0;
+    const network=intToIp(networkInt);
+    const broadcast=intToIp(broadcastInt);
+    const hostCount=Math.pow(2,32-prefix)-2;
+    const firstUsable=intToIp(networkInt+1);
+    const lastUsable=intToIp(broadcastInt-1);
+    const cfgs={
+      netzadresse:{question:`IP-Adresse:    ${hostIp}\nPräfixlänge:   /${prefix}\n\nWie lautet die Netzadresse?`,answer:network,hint:`IP AND Subnetzmaske\nMaske: ${mask}`,extra:`${hostIp} AND ${mask} = ${network}`},
+      broadcast:{question:`IP-Adresse:    ${hostIp}\nPräfixlänge:   /${prefix}\n\nWie lautet die Broadcast-Adresse?`,answer:broadcast,hint:`Netzadresse OR (NOT Maske)\nNetzadresse: ${network}`,extra:`Broadcast: ${broadcast}`},
+      hosts:{question:`Präfixlänge:   /${prefix}\n\nWie viele nutzbare Hosts sind möglich?`,answer:String(hostCount),hint:`2^(32 − ${prefix}) − 2 = 2^${32-prefix} − 2`,extra:`${Math.pow(2,32-prefix)} − 2 = ${hostCount}`},
+      subnetzmaske:{question:`CIDR-Notation: /${prefix}\n\nWie lautet die Subnetzmaske?`,answer:mask,hint:`${prefix} Einsen, dann ${32-prefix} Nullen im Binärsystem`,extra:`/${prefix} → ${mask}`},
+      prefix_von_maske:{question:`Subnetzmaske:  ${mask}\n\nWie lautet die Präfixlänge? (Format: /XX)`,answer:`/${prefix}`,hint:`Zähle die führenden Einsen der Subnetzmaske`,extra:`${mask} → /${prefix}`},
+      erste_ip:{question:`Netzadresse:   ${network}\nPräfixlänge:   /${prefix}\n\nErste nutzbare Host-IP?`,answer:firstUsable,hint:`Netzadresse + 1`,extra:`${network} + 1 = ${firstUsable}`},
+      letzte_ip:{question:`Netzadresse:   ${network}\nPräfixlänge:   /${prefix}\n\nLetzte nutzbare Host-IP?`,answer:lastUsable,hint:`Broadcast − 1  (Broadcast: ${broadcast})`,extra:`${broadcast} − 1 = ${lastUsable}`},
+    };
+    return{type,...cfgs[type]};
+  }
+
+  function generateIPv6Task(){
+    const types=["netzadresse","hosts","subnetz_anzahl"];
+    const type=types[Math.floor(Math.random()*types.length)];
+    if(type==="netzadresse"){
+      const groups=Math.floor(Math.random()*5)+2;
+      const prefix=groups*16;
+      const g=Array.from({length:8},()=>Math.floor(Math.random()*0x10000).toString(16).padStart(4,"0"));
+      const ip=g.join(":");
+      const net=[...g.slice(0,groups),...Array(8-groups).fill("0000")].join(":");
+      return{type,question:`IPv6-Adresse:  ${ip}\nPräfixlänge:   /${prefix}\n\nWie lautet die Netzadresse?\n(Alle 8 Gruppen, z.B. xxxx:...:0000)`,answer:net,hint:`Die ersten ${groups} Gruppen (/${prefix}) bleiben, der Rest wird 0000`,extra:`/${prefix} → ${groups} Gruppen behalten, ${8-groups}× 0000`};
+    } else if(type==="hosts"){
+      const prefix=(Math.floor(Math.random()*7)+1)*16;
+      const exp=128-prefix;
+      return{type,question:`IPv6-Präfixlänge: /${prefix}\n\nWie viele Adressen gibt es in diesem Netz?\n(Format: 2^XX)`,answer:`2^${exp}`,hint:`2^(128 − ${prefix}) = 2^${exp}`,extra:`128 − ${prefix} = ${exp} → 2^${exp} Adressen`};
+    } else {
+      const examples=[{from:48,to:64,exp:16,cnt:"65.536"},{from:64,to:80,exp:16,cnt:"65.536"},{from:32,to:48,exp:16,cnt:"65.536"},{from:48,to:56,exp:8,cnt:"256"},{from:56,to:64,exp:8,cnt:"256"}];
+      const ex=examples[Math.floor(Math.random()*examples.length)];
+      return{type,question:`Ein IPv6-Netz /${ex.from} wird in /${ex.to}-Subnetze aufgeteilt.\n\nWie viele Subnetze entstehen?\n(Format: 2^XX)`,answer:`2^${ex.exp}`,hint:`2^(${ex.to} − ${ex.from}) = 2^${ex.exp}`,extra:`2^${ex.exp} = ${ex.cnt} Subnetze`};
+    }
+  }
+
+  function generateTask(v){
+    const t=v==="ipv4"?generateIPv4Task():generateIPv6Task();
+    setTask(t);setAnswer("");setChecked(false);setIsCorrect(false);
+    setTimeout(()=>inputRef.current?.focus(),80);
+  }
+
+  function checkAnswer(){
+    if(!answer.trim()||checked)return;
+    const norm=s=>s.trim().toLowerCase().replace(/\s+/g,"");
+    const ok=norm(answer)===norm(task.answer);
+    setIsCorrect(ok);setChecked(true);setTotal(t=>t+1);
+    if(ok){setStreak(s=>s+1);setCorrectCount(c=>c+1);}else{setStreak(0);}
+  }
+
+  const taskMeta={
+    netzadresse:     {label:"Netzadresse",        color:"#3b82f6"},
+    broadcast:       {label:"Broadcast",           color:"#ef4444"},
+    hosts:           {label:"Anzahl Hosts",        color:"#22c55e"},
+    subnetzmaske:    {label:"Subnetzmaske",        color:"#a855f7"},
+    prefix_von_maske:{label:"Präfixlänge",         color:"#f97316"},
+    erste_ip:        {label:"Erste nutzbare IP",   color:"#38bdf8"},
+    letzte_ip:       {label:"Letzte nutzbare IP",  color:"#fb923c"},
+    subnetz_anzahl:  {label:"Subnetzanzahl",       color:"#eab308"},
+  };
+
+  return(
+    <div style={{flex:1,overflow:"auto",display:"flex",justifyContent:"center"}}>
+      <div style={{padding:"1.5rem",maxWidth:"650px",width:"100%"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"1.5rem"}}>
+          <div>
+            <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.05rem",fontWeight:"bold",color:"#e0e0e0",display:"flex",alignItems:"center",gap:"0.5rem"}}><Icon name="subnet" size={18}/>Subnetting Trainer</div>
+            <div style={{fontSize:"0.65rem",color:"#444",letterSpacing:"0.1em",marginTop:"0.2rem"}}>IPv4 & IPv6 · IHK-Prüfungsvorbereitung</div>
+          </div>
+          {total>0&&(
+            <div style={{display:"flex",gap:"1rem",alignItems:"center"}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:"1rem",fontWeight:"bold",color:"#22c55e",fontFamily:"'Courier New',monospace"}}>{correctCount}/{total}</div>
+                <div style={{fontSize:"0.58rem",color:"#444"}}>Richtig</div>
+              </div>
+              {streak>=3&&<div style={{textAlign:"center"}}>
+                <div style={{fontSize:"1rem",fontWeight:"bold",color:"#f97316",fontFamily:"'Courier New',monospace"}}>🔥{streak}</div>
+                <div style={{fontSize:"0.58rem",color:"#444"}}>Serie</div>
+              </div>}
+            </div>
+          )}
+        </div>
+        {!version?(
+          <div>
+            <div style={{fontSize:"0.8rem",color:"#555",marginBottom:"1.25rem",textAlign:"center"}}>Wähle ein Protokoll:</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.9rem",marginBottom:"1.5rem"}}>
+              {[
+                {id:"ipv4",label:"IPv4",icon:"🌐",color:"#3b82f6",sub:"32-Bit Adressen",tasks:"Netzadresse · Broadcast · Hosts · Masken"},
+                {id:"ipv6",label:"IPv6",icon:"🔵",color:"#a855f7",sub:"128-Bit Adressen",tasks:"Netzadresse · Adressen · Subnetzanzahl"},
+              ].map(v=>(
+                <button key={v.id} onClick={()=>{setVersion(v.id);generateTask(v.id);}}
+                  style={{padding:"1.5rem 1rem",background:`${v.color}10`,border:`1px solid ${v.color}25`,borderRadius:"14px",cursor:"pointer",color:v.color,fontFamily:"inherit",textAlign:"left"}}>
+                  <div style={{fontSize:"2rem",marginBottom:"0.6rem"}}>{v.icon}</div>
+                  <div style={{fontSize:"1rem",fontWeight:"bold",marginBottom:"0.2rem"}}>{v.label}</div>
+                  <div style={{fontSize:"0.7rem",color:"#666",marginBottom:"0.4rem"}}>{v.sub}</div>
+                  <div style={{fontSize:"0.66rem",color:"#555"}}>{v.tasks}</div>
+                </button>
+              ))}
+            </div>
+            <div style={{padding:"1rem",background:"#0c0c0c",border:"1px solid #181818",borderRadius:"12px"}}>
+              <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>WICHTIGE FORMELN</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem"}}>
+                {[
+                  ["Netzadresse","IP AND Subnetzmaske"],
+                  ["Broadcast","Netz OR (NOT Maske)"],
+                  ["Nutzbare Hosts","2^(32 − Prefix) − 2"],
+                  ["IPv6 Adressen","2^(128 − Prefix)"],
+                  ["Subnetzmaske","/24 = 255.255.255.0"],
+                  ["Subnetzanzahl","2^(neu − alt)"],
+                ].map(([lbl,frm])=>(
+                  <div key={lbl} style={{padding:"0.55rem 0.7rem",background:"#111",borderRadius:"7px",border:"1px solid #191919"}}>
+                    <div style={{fontSize:"0.6rem",color:"#444",marginBottom:"0.2rem"}}>{lbl}</div>
+                    <div style={{fontSize:"0.76rem",color:"#777",fontFamily:"'Courier New',monospace"}}>{frm}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ):task?(
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"1rem",flexWrap:"wrap"}}>
+              <button onClick={()=>{setVersion(null);setTask(null);setStreak(0);setTotal(0);setCorrectCount(0);}}
+                style={{background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit"}}>← Zurück</button>
+              {taskMeta[task.type]&&<span style={{fontSize:"0.68rem",background:`${taskMeta[task.type].color}15`,color:taskMeta[task.type].color,padding:"0.2rem 0.65rem",borderRadius:"20px",border:`1px solid ${taskMeta[task.type].color}30`,fontWeight:"bold"}}>{taskMeta[task.type].label}</span>}
+              <span style={{fontSize:"0.66rem",color:"#333",marginLeft:"auto"}}>{version.toUpperCase()}</span>
+              <button onClick={()=>generateTask(version)}
+                style={{background:"none",border:"1px solid #222",borderRadius:"7px",padding:"0.3rem 0.7rem",color:"#555",cursor:"pointer",fontSize:"0.72rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.3rem"}}>
+                <Icon name="refresh" size={11}/>Überspringen
+              </button>
+            </div>
+            <div style={{background:"#0b0b0b",border:"1px solid #1a1a1a",borderRadius:"14px",padding:"1.5rem",marginBottom:"1rem"}}>
+              <div style={{fontSize:"0.6rem",color:"#333",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>AUFGABE</div>
+              <pre style={{fontFamily:"'Courier New',monospace",fontSize:"0.95rem",color:"#ddd",lineHeight:1.85,whiteSpace:"pre-wrap",margin:0}}>{task.question}</pre>
+            </div>
+            {!checked?(
+              <div>
+                <input ref={inputRef} value={answer} onChange={e=>setAnswer(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")checkAnswer();}}
+                  placeholder={version==="ipv4"?"z.B.  192.168.1.0  oder  254  oder  /24":"z.B.  2001:0db8:...:0000  oder  2^64"}
+                  style={{width:"100%",background:"#0f0f0f",border:"1px solid #252525",borderRadius:"10px",padding:"0.85rem 1rem",color:"#ddd",fontSize:"0.9rem",outline:"none",fontFamily:"'Courier New',monospace",marginBottom:"0.75rem",boxSizing:"border-box"}}
+                />
+                <button onClick={checkAnswer} disabled={!answer.trim()}
+                  style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:answer.trim()?"#3b82f6":"#161616",border:"none",color:answer.trim()?"#fff":"#333",fontSize:"0.88rem",fontWeight:"bold",cursor:answer.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                  Prüfen →
+                </button>
+              </div>
+            ):(
+              <div>
+                <div style={{padding:"1.25rem",background:isCorrect?"#081208":"#130808",border:`1px solid ${isCorrect?"#166534":"#7f1d1d"}`,borderRadius:"12px",marginBottom:"0.85rem"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.75rem"}}>
+                    <span style={{fontSize:"1.3rem"}}>{isCorrect?"✅":"❌"}</span>
+                    <span style={{fontWeight:"bold",fontSize:"0.95rem",color:isCorrect?"#4ade80":"#f87171"}}>{isCorrect?"Richtig!":"Nicht ganz!"}</span>
+                    {isCorrect&&streak>=3&&<span style={{fontSize:"0.8rem",marginLeft:"0.2rem"}}>🔥 {streak}er-Serie!</span>}
+                  </div>
+                  {!isCorrect&&<div style={{fontSize:"0.83rem",color:"#888",marginBottom:"0.5rem",fontFamily:"'Courier New',monospace"}}>Deine Antwort: <span style={{color:"#f87171"}}>{answer}</span></div>}
+                  <div style={{fontSize:"0.83rem",color:"#aaa",fontFamily:"'Courier New',monospace"}}>Korrekte Antwort: <span style={{color:"#4ade80",fontWeight:"bold"}}>{task.answer}</span></div>
+                  {task.extra&&<div style={{marginTop:"0.75rem",padding:"0.55rem 0.75rem",background:"#0a0a0a",borderRadius:"7px",fontSize:"0.78rem",color:"#555",fontFamily:"'Courier New',monospace"}}>{task.extra}</div>}
+                </div>
+                <div style={{padding:"0.75rem 1rem",background:"#080d14",border:"1px solid #1a2535",borderRadius:"10px",marginBottom:"0.85rem",fontSize:"0.8rem",color:"#5b9bd5",lineHeight:1.65}}>
+                  💡 <strong>Tipp:</strong> {task.hint}
+                </div>
+                <button onClick={()=>generateTask(version)}
+                  style={{width:"100%",padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.88rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+                  Nächste Aufgabe →
+                </button>
+              </div>
+            )}
+          </div>
+        ):null}
+      </div>
+    </div>
+  );
+}
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
@@ -1857,6 +2063,7 @@ export default function App() {
           <button onClick={()=>setPage("abfrage")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="abfrage"?"#a855f7":"transparent",color:page==="abfrage"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="abfrage"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="quiz" size={14}/>Abfrage-Modus</button>
           <button onClick={()=>setPage("statistik")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="statistik"?"#22c55e":"transparent",color:page==="statistik"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="statistik"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="chart" size={14}/>Statistik</button>
           <button onClick={()=>setPage("karteikarten")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="karteikarten"?"#f97316":"transparent",color:page==="karteikarten"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="karteikarten"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="card" size={14}/>Karteikarten</button>
+          <button onClick={()=>setPage("subnetting")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="subnetting"?"#38bdf8":"transparent",color:page==="subnetting"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="subnetting"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="subnet" size={14}/>Subnetting</button>
           <div style={{width:"1px",height:"20px",background:"#1e1e1e",margin:"0 0.2rem"}}/>
           <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem 0.8rem",color:"#555",cursor:"pointer",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="refresh" size={13}/>Sync</button>
           {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:"0.45rem",background:"#fff",color:"#000",border:"none",borderRadius:"8px",padding:"0.5rem 1rem",fontSize:"0.82rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}><Icon name="plus" size={14}/>Hinzufügen</button>}
@@ -1922,6 +2129,7 @@ export default function App() {
                 <button onClick={()=>setPage("abfrage")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="quiz" size={12}/><span>Abfrage-Modus</span></button>
                 <button onClick={()=>setPage("statistik")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="chart" size={12}/><span>Statistik</span></button>
                 <button onClick={()=>setPage("karteikarten")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="card" size={12}/><span>Karteikarten</span></button>
+                <button onClick={()=>setPage("subnetting")} className="sbtn" style={{display:"flex",alignItems:"center",gap:"0.45rem",padding:"0.4rem 0.65rem",borderRadius:"6px",border:"none",background:"transparent",color:"#4a4a4a",cursor:"pointer",fontSize:"0.8rem",fontFamily:"inherit"}}><Icon name="subnet" size={12}/><span>Subnetting</span></button>
               </SideSection>
               <div style={{marginTop:"auto",padding:"0.75rem 0.5rem",borderTop:"1px solid #0f0f0f"}}>
                 <div style={{fontSize:"0.58rem",color:"#2a2a2a",letterSpacing:"0.15em",marginBottom:"0.5rem"}}>STATISTIK</div>
@@ -1940,6 +2148,7 @@ export default function App() {
         {page==="abfrage" && <AbfrageModus items={items}/>}
         {page==="statistik" && <StatistikPage items={items} fortschrittData={fortschrittData}/>}
         {page==="karteikarten" && <KarteikartenModus items={items}/>}
+        {page==="subnetting" && <SubnettingTrainer/>}
 
         {page==="lernportal" && (
           <div style={{flex:1,padding:isMobile?"0.75rem":"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
@@ -2015,6 +2224,7 @@ export default function App() {
             {id:"abfrage",icon:"quiz",label:"Abfrage",color:"#a855f7"},
             {id:"statistik",icon:"chart",label:"Statistik",color:"#22c55e"},
             {id:"karteikarten",icon:"card",label:"Karten",color:"#f97316"},
+            {id:"subnetting",icon:"subnet",label:"Subnet",color:"#38bdf8"},
           ].map(tab=>(
             <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
               <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent"}}><Icon name={tab.icon} size={18}/></div>
