@@ -1762,18 +1762,23 @@ function LoginScreen({ onLogin }) {
 }
 
 // ── Subnetting Trainer ────────────────────────────────────────────────────────
-function SubnettingTrainer() {
+  function SubnettingTrainer() {
   const [version,setVersion]=useState(null);
   const [questionCount,setQuestionCount]=useState(null);
-  const [phase,setPhase]=useState("setup"); // "setup" | "question" | "result"
+  const [phase,setPhase]=useState("setup");
   const [task,setTask]=useState(null);
   const [answer,setAnswer]=useState("");
   const [checked,setChecked]=useState(false);
   const [isCorrect,setIsCorrect]=useState(false);
   const [streak,setStreak]=useState(0);
-  const [history,setHistory]=useState([]); // [{task,userAnswer,isCorrect}]
+  const [history,setHistory]=useState([]);
   const [kiLoading,setKiLoading]=useState(false);
   const [kiEval,setKiEval]=useState(null);
+  const [sessionHistory,setSessionHistory]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem("subnetting_history")||"[]");}
+    catch{return[];}
+  });
+  const [historyOpen,setHistoryOpen]=useState(null);
   const inputRef=useRef();
 
   // ── IPv4 helpers ──
@@ -1933,13 +1938,23 @@ function SubnettingTrainer() {
   }
 
   // ── Grading ──
-  function calcNote(pct){
-    if(pct>=92)return{note:1,label:"Sehr gut",color:"#22c55e"};
-    if(pct>=81)return{note:2,label:"Gut",color:"#84cc16"};
-    if(pct>=67)return{note:3,label:"Befriedigend",color:"#eab308"};
-    if(pct>=50)return{note:4,label:"Ausreichend",color:"#f97316"};
-    if(pct>=30)return{note:5,label:"Mangelhaft",color:"#ef4444"};
-    return{note:6,label:"Ungenügend",color:"#7f1d1d"};
+    const GRADE_TABLES={
+    5: {5:1,4:2,3:3,2:4,1:5,0:6},
+    10:{10:1,9:1.5,8:2,7:2.5,6:3,5:3.5,4:4,3:4.5,2:5,1:5.5,0:6},
+    20:{20:1,19:1.2,18:1.5,17:1.7,16:2,15:2.2,14:2.5,13:2.7,12:3,11:3.2,10:3.5,9:3.7,8:4,7:4.2,6:4.5,5:4.7,4:5,3:5.2,2:5.5,1:5.7,0:6},
+    30:{30:1,29:1.2,28:1.3,27:1.5,26:1.7,25:1.8,24:2,23:2.2,22:2.3,21:2.5,20:2.7,19:2.8,18:3,17:3.2,16:3.3,15:3.5,14:3.7,13:3.8,12:4,11:4.2,10:4.3,9:4.5,8:4.7,7:4.8,6:5,5:5.2,4:5.3,3:5.5,2:5.7,1:5.8,0:6}
+  };
+  function calcNote(correct,total){
+    const table=GRADE_TABLES[total]||GRADE_TABLES[10];
+    const note=table[correct]??6;
+    let label,color;
+    if(note<2){label="Sehr gut";color="#22c55e";}
+    else if(note<3){label="Gut";color="#84cc16";}
+    else if(note<4){label="Befriedigend";color="#eab308";}
+    else if(note<5){label="Ausreichend";color="#f97316";}
+    else if(note<6){label="Mangelhaft";color="#ef4444";}
+    else{label="Ungenügend";color="#7f1d1d";}
+    return{note,label,color};
   }
 
   // ── Session control ──
@@ -1974,17 +1989,30 @@ function SubnettingTrainer() {
   }
 
   async function fetchKiEval(hist){
-    setKiLoading(true);
-    const correct=hist.filter(h=>h.isCorrect).length;
-    const pct=Math.round((correct/hist.length)*100);
-    const n=calcNote(pct);
-    const summary=hist.map((h,i)=>`${i+1}. [${h.isCorrect?"✓":"✗"}] Typ: ${h.task.type} | Frage: ${h.task.question.replace(/\n/g," ").substring(0,80)} | Antwort: "${h.userAnswer}" | Richtig: "${h.task.answer}"`).join("\n");
-    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, kurz und konkret. Nutze Markdown (fett, Listen).";
-    const messages=[{role:"user",content:`Ich habe ${hist.length} ${version.toUpperCase()}-Subnetting-Aufgaben bearbeitet: ${correct}/${hist.length} richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nErgebnisse:\n${summary}\n\nBitte gib mir:\n1. Kurze Einschätzung (2-3 Sätze)\n2. Meine Schwachstellen (max. 3 Punkte)\n3. Konkrete Lerntipps für die IHK-Prüfung (max. 3 Punkte)`}];
-    try{ const r=await callKI(messages,system); setKiEval(r); }
-    catch(e){ setKiEval("❌ KI nicht verfügbar: "+e.message); }
-    setKiLoading(false);
-  }
+  setKiLoading(true);
+  const correct=hist.filter(h=>h.isCorrect).length;
+  const total=hist.length;
+  const pct=Math.round(correct/total*100);
+  const n=calcNote(correct,total);
+  const summary=hist.map((h,i)=>`${i+1}. ${h.task.question}\n   Antwort: ${h.userAnswer||"(keine)"} → ${h.isCorrect?"✓":"✗"} (Korrekt: ${h.task.answer})`).join("\n");
+  const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
+  const messages=[{role:"user",content:`Ich habe ${total} ${version.toUpperCase()}-Subnetting-Aufgaben bearbeitet: ${correct}/${total} richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nErgebnisse:\n${summary}\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Lerntipps`}];
+  const r=await callKI(messages,system);
+  const session={
+    date:new Date().toISOString(),
+    version,
+    total,
+    correct,
+    pct,
+    note:n,
+    questions:hist.map(h=>({question:h.task.question,answer:h.task.answer,userAnswer:h.userAnswer,isCorrect:h.isCorrect}))
+  };
+  const updated=[session,...(()=>{try{return JSON.parse(localStorage.getItem("subnetting_history")||"[]");}catch{return[];}})()].slice(0,50);
+  localStorage.setItem("subnetting_history",JSON.stringify(updated));
+  setSessionHistory(updated);
+  setKiEval(r);
+  setKiLoading(false);
+}
 
   function resetAll(){
     setVersion(null);setQuestionCount(null);setTask(null);
@@ -2138,72 +2166,64 @@ function SubnettingTrainer() {
 
         {/* ── RESULT ── */}
         {phase==="result"&&(()=>{
-          const correct=history.filter(h=>h.isCorrect).length;
-          const pct=Math.round((correct/history.length)*100);
-          const n=calcNote(pct);
-          return(
-            <div>
-              {/* Note */}
-              <div style={{padding:"1.75rem",background:"#0c0c0c",border:`2px solid ${n.color}40`,borderRadius:"16px",marginBottom:"1rem",textAlign:"center"}}>
-                <div style={{fontSize:"0.65rem",color:"#444",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold"}}>ERGEBNIS</div>
-                <div style={{fontSize:"4rem",fontWeight:"bold",color:n.color,fontFamily:"'Courier New',monospace",lineHeight:1}}>{n.note}</div>
-                <div style={{fontSize:"1.1rem",color:n.color,marginTop:"0.4rem",fontWeight:"bold"}}>{n.label}</div>
-                <div style={{fontSize:"0.85rem",color:"#666",marginTop:"0.5rem"}}>{correct} / {history.length} richtig · {pct}%</div>
-                <div style={{marginTop:"1rem",height:"6px",background:"#1a1a1a",borderRadius:"3px",overflow:"hidden"}}>
-                  <div style={{height:"100%",background:n.color,width:`${pct}%`,borderRadius:"3px",transition:"width 0.8s ease"}}/>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.6rem",color:"#333",marginTop:"0.3rem"}}>
-                  <span>Note 6 (0%)</span><span>Note 4 (50%)</span><span>Note 1 (92%)</span>
-                </div>
-              </div>
-
-              {/* Fragen-Übersicht */}
-              <div style={{marginBottom:"1rem"}}>
-                <div style={{fontSize:"0.65rem",color:"#444",letterSpacing:"0.15em",marginBottom:"0.6rem",fontWeight:"bold"}}>ÜBERSICHT</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"0.4rem"}}>
-                  {history.map((h,i)=>(
-                    <div key={i} title={`${i+1}. ${h.task.type}: ${h.userAnswer}`}
-                      style={{width:"28px",height:"28px",borderRadius:"6px",background:h.isCorrect?"#081208":"#130808",border:`1px solid ${h.isCorrect?"#166534":"#7f1d1d"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",color:h.isCorrect?"#4ade80":"#f87171",fontWeight:"bold",cursor:"default"}}>
-                      {h.isCorrect?"✓":"✗"}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* KI-Auswertung */}
-              <div style={{background:"#080d14",border:"1px solid #1a2535",borderRadius:"14px",padding:"1.25rem",marginBottom:"1rem"}}>
-                <div style={{fontSize:"0.65rem",color:"#3b82f6",letterSpacing:"0.15em",marginBottom:"0.75rem",fontWeight:"bold",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="bot" size={11}/>KI-AUSWERTUNG</div>
-                {kiLoading?(
-                  <div style={{display:"flex",gap:"4px",alignItems:"center",padding:"0.5rem 0"}}>
-                    {[0,1,2].map(n=><div key={n} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#3b82f6",animation:`bounce 1.2s infinite ${n*0.2}s`}}/>)}
-                    <span style={{fontSize:"0.8rem",color:"#444",marginLeft:"0.5rem"}}>Analysiere deine Antworten...</span>
-                  </div>
-                ):kiEval?(
-                  <div style={{fontSize:"0.83rem",color:"#94b4d4",lineHeight:1.7}}>{renderMarkdown(kiEval)}</div>
-                ):(
-                  <div style={{fontSize:"0.8rem",color:"#444"}}>Keine Auswertung verfügbar</div>
-                )}
-              </div>
-
-              {/* Buttons */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem"}}>
-                <button onClick={()=>{setHistory([]);setPhase("question");setTask(version==="ipv4"?generateIPv4Task():generateIPv6Task());setAnswer("");setChecked(false);setIsCorrect(false);setStreak(0);setKiEval(null);setTimeout(()=>inputRef.current?.focus(),80);}}
-                  style={{padding:"0.85rem",borderRadius:"10px",background:"#0c0c0c",border:"1px solid #2a2a2a",color:"#aaa",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
-                  Nochmal ({questionCount} Fragen)
-                </button>
-                <button onClick={resetAll}
-                  style={{padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
-                  Neue Session
-                </button>
-              </div>
-            </div>
-          );
-        })()}
-
+  const correct=history.filter(h=>h.isCorrect).length;
+  const total=history.length;
+  const pct=Math.round(correct/total*100);
+  const n=calcNote(correct,total);
+  return(
+    <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem"}}>
+      <div style={{textAlign:"center",marginBottom:"2rem"}}>
+        <div style={{fontSize:"4rem",marginBottom:"1rem"}}>{pct>=80?"🏆":pct>=50?"💪":"📚"}</div>
+        <h2 style={{margin:0,color:"#f1f5f9"}}>Auswertung</h2>
       </div>
+
+      {/* Note */}
+      <div style={{textAlign:"center",padding:"2rem",borderRadius:"16px",background:"#0f172a",border:`2px solid ${n.color}`,marginBottom:"1.5rem"}}>
+        <div style={{fontSize:"5rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
+        <div style={{fontSize:"1.5rem",color:n.color,marginTop:"0.5rem"}}>{n.label}</div>
+        <div style={{color:"#94a3b8",marginTop:"0.75rem",fontSize:"1.1rem"}}>{correct}/{total} richtig · {pct}%</div>
+        <div style={{color:"#475569",marginTop:"0.25rem",fontSize:"0.85rem"}}>{version?.toUpperCase()} · {total} Fragen</div>
+      </div>
+
+      {/* Einzelergebnisse */}
+      <div style={{marginBottom:"1.5rem"}}>
+        {history.map((h,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:"0.75rem",padding:"0.75rem",borderRadius:"8px",background:h.isCorrect?"#0a2e1a":"#2e0a0a",border:`1px solid ${h.isCorrect?"#22c55e33":"#ef444433"}`,marginBottom:"0.5rem"}}>
+            <span style={{fontSize:"1.1rem",marginTop:"0.1rem"}}>{h.isCorrect?"✅":"❌"}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{color:"#e2e8f0",fontSize:"0.85rem",marginBottom:"0.25rem"}}>{h.task.question}</div>
+              <div style={{fontSize:"0.8rem",color:"#94a3b8"}}>Deine Antwort: <span style={{color:h.isCorrect?"#22c55e":"#ef4444"}}>{h.userAnswer||"(keine)"}</span></div>
+              {!h.isCorrect&&<div style={{fontSize:"0.8rem",color:"#94a3b8",marginTop:"0.1rem"}}>Richtig: <span style={{color:"#22c55e"}}>{h.task.answer}</span></div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* KI Auswertung */}
+      {kiLoading&&<div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem",color:"#94a3b8"}}>KI analysiert deine Ergebnisse…</div>}
+      {kiEval&&<div style={{padding:"1.5rem",borderRadius:"12px",background:"#0f172a",border:"1px solid #1e293b",marginBottom:"1.5rem"}}>
+        <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.75rem"}}>KI-Auswertung</div>
+        <div style={{color:"#e2e8f0",fontSize:"0.9rem"}}>{renderMarkdown(kiEval)}</div>
+      </div>}
+
+      {/* Buttons */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem",marginBottom:"0.75rem"}}>
+        <button onClick={()=>{setHistory([]);setPhase("question");setTask(version==="ipv4"?generateIPv4Task():generateIPv6Task());setAnswer("");setChecked(false);setIsCorrect(false);setStreak(0);setKiEval(null);setTimeout(()=>inputRef.current?.focus(),80);}}
+          style={{padding:"0.85rem",borderRadius:"10px",background:"#0c0c0c",border:"1px solid #2a2a2a",color:"#aaa",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+          Nochmal ({questionCount} Fragen)
+        </button>
+        <button onClick={resetAll}
+          style={{padding:"0.85rem",borderRadius:"10px",background:"#fff",border:"none",color:"#000",fontSize:"0.85rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}>
+          Neue Session
+        </button>
+      </div>
+      <button onClick={()=>setPhase("history")}
+        style={{width:"100%",padding:"0.75rem",borderRadius:"10px",background:"transparent",border:"1px solid #334155",color:"#94a3b8",fontSize:"0.85rem",cursor:"pointer",fontFamily:"inherit"}}>
+        Historie ansehen ({sessionHistory.length} Sessions)
+      </button>
     </div>
   );
-}
+})()}
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
