@@ -8,7 +8,7 @@ const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPAB
 const BUCKET = "fisi-dateien";
 const TABLE  = "zusammenfassungen";
 
-const CATEGORIES = ["Netzwerke","IT-Sicherheit","Virtualisierung","Scripting","Datenbanken","Hardware","WiSo","Sonstiges"];
+const CATEGORIES = ["Netzwerke","IT-Sicherheit","Virtualisierung","Scripting","Datenbanken","Hardware","WiSo","Gemeinschaftskunde","Sonstiges"];
 const CAT_COLORS = {
   "Netzwerke":       { bg:"#0a1f3d", badge:"#3b82f6" },
   "IT-Sicherheit":   { bg:"#1a0a2e", badge:"#a855f7" },
@@ -17,6 +17,7 @@ const CAT_COLORS = {
   "Datenbanken":     { bg:"#0a1828", badge:"#38bdf8" },
   "Hardware":        { bg:"#2e0f0f", badge:"#ef4444" },
   "WiSo":            { bg:"#1e0a1e", badge:"#ec4899" },
+  "Geminschaftskunde":  { bg:"#052e16", badge:"#22c55e" },
   "Sonstiges":       { bg:"#111",    badge:"#888"    },
 };
 const FILE_ICONS = {
