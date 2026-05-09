@@ -210,6 +210,7 @@ const Icon = ({ name, size=18 }) => {
     note:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
     card:      <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="7" y1="15" x2="12" y2="15"/></svg>,
     subnet:    <svg width={size} height={size} viewBox="0 0 24 24" {...p}><rect x="2" y="2" width="8" height="8" rx="1.5"/><rect x="14" y="2" width="8" height="8" rx="1.5"/><rect x="2" y="14" width="8" height="8" rx="1.5"/><rect x="14" y="14" width="8" height="8" rx="1.5"/><line x1="10" y1="6" x2="14" y2="6"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="10" y1="18" x2="14" y2="18"/></svg>,
+    shield: <svg width={size} height={size} viewBox="0 0 24 24" {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   };
   return icons[name]||null;
 };
@@ -2428,7 +2429,6 @@ export default function App() {
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0c0c0c}::-webkit-scrollbar-thumb{background:#252525;border-radius:3px}
         .card{transition:transform .18s,box-shadow .18s;cursor:pointer}.card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
         .sbtn{transition:all .15s}.sbtn:hover{color:#ccc!important;background:#111!important}
-        {devMode&&<button onClick={()=>setPage("dev")} className="sbtn" style={{marginTop:"auto",borderColor:page==="dev"?"#f97316":"",color:page==="dev"?"#f97316":""}}>
           <Icon name="shield" size={16}/>Dev
         </button>}
         .sidebar{transition:width 0.3s ease,opacity 0.3s ease}.navbtn{transition:all 0.2s}
@@ -2624,7 +2624,7 @@ export default function App() {
             {id:"statistik",icon:"chart",label:"Statistik",color:"#22c55e"},
             {id:"karteikarten",icon:"card",label:"Karten",color:"#f97316"},
             {id:"subnetting",icon:"subnet",label:"Subnet",color:"#38bdf8"},
-            (devMode?[{id:"dev",icon:"shield",label:"Dev",color:"#f97316"}]:[])
+            ...(devMode?[{id:"dev",icon:"shield",label:"Dev",color:"#f97316"}]:[])
           ].map(tab=>(
             <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
               <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent"}}><Icon name={tab.icon} size={18}/></div>
