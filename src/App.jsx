@@ -2187,6 +2187,153 @@ function SubnettingTrainer() {
     </div>
   );
 }
+
+function DevDashboard({clientIp}){
+  const [logs,setLogs]=useState([]);
+  const [rules,setRules]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [newIp,setNewIp]=useState("");
+  const [newNote,setNewNote]=useState("");
+  const [tab,setTab]=useState("logs");
+
+  useEffect(()=>{loadData();},[]);
+
+  async function loadData(){
+    setLoading(true);
+    const{data:l}=await supabase.from("visitor_logs").select("*").order("visited_at",{ascending:false}).limit(200);
+    const{data:r}=await supabase.from("ip_rules").select("*").order("created_at",{ascending:false});
+    setLogs(l||[]);setRules(r||[]);setLoading(false);
+  }
+
+  async function addRule(ip,type,note=""){
+    if(!ip.trim())return;
+    await supabase.from("ip_rules").upsert({ip:ip.trim(),rule_type:type,note},{onConflict:"ip"});
+    setNewIp("");setNewNote("");loadData();
+  }
+
+  async function deleteRule(id){
+    await supabase.from("ip_rules").delete().eq("id",id);
+    loadData();
+  }
+
+  async function clearLogs(){
+    if(!confirm("Alle Logs löschen?"))return;
+    await supabase.from("visitor_logs").delete().neq("id","00000000-0000-0000-0000-000000000000");
+    loadData();
+  }
+
+  const grouped=logs.reduce((a,l)=>{
+    if(!a[l.ip])a[l.ip]={ip:l.ip,count:0,last:l.visited_at,agents:new Set()};
+    a[l.ip].count++;
+    if(l.visited_at>a[l.ip].last)a[l.ip].last=l.visited_at;
+    if(l.user_agent)a[l.ip].agents.add(l.user_agent.substring(0,80));
+    return a;
+  },{});
+  const uniqueIps=Object.values(grouped).sort((a,b)=>b.count-a.count);
+
+  const getRuleForIp=(ip)=>rules.find(r=>r.ip===ip);
+
+  return(
+    <div style={{flex:1,overflowY:"auto",padding:"1.5rem 2rem",minWidth:0}}>
+      <div style={{maxWidth:"900px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"1rem",marginBottom:"1.5rem",flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.3rem",fontWeight:"bold",color:"#f97316"}}>🛡 Developer Dashboard</div>
+            <div style={{fontSize:"0.78rem",color:"#555",marginTop:"0.2rem"}}>Deine IP: <span style={{color:"#f97316",fontFamily:"monospace"}}>{clientIp||"wird geladen..."}</span></div>
+          </div>
+          <button onClick={loadData} style={{marginLeft:"auto",padding:"0.5rem 1rem",borderRadius:"8px",background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem"}}>↻ Neu laden</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:"0.5rem",marginBottom:"1.5rem"}}>
+          {[{id:"logs",label:`Besucher (${uniqueIps.length} IPs)`},{id:"rules",label:`Regeln (${rules.length})`},{id:"add",label:"IP hinzufügen"}].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"0.6rem 1.2rem",borderRadius:"8px",border:tab===t.id?"1px solid #f97316":"1px solid #1e1e1e",background:tab===t.id?"#f9731615":"#0f0f0f",color:tab===t.id?"#f97316":"#666",cursor:"pointer",fontFamily:"inherit",fontSize:"0.85rem",fontWeight:tab===t.id?"bold":"normal"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {loading&&<div style={{textAlign:"center",padding:"2rem",color:"#555"}}>Lade Daten…</div>}
+
+        {/* Besucher-Logs */}
+        {!loading&&tab==="logs"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+              <div style={{fontSize:"0.72rem",color:"#555",letterSpacing:"0.1em"}}>{logs.length} EINTRÄGE GESAMT</div>
+              <button onClick={clearLogs} style={{padding:"0.4rem 0.8rem",borderRadius:"6px",background:"transparent",border:"1px solid #ef444433",color:"#ef4444",cursor:"pointer",fontSize:"0.75rem",fontFamily:"inherit"}}>Logs löschen</button>
+            </div>
+            {uniqueIps.map(({ip,count,last,agents})=>{
+              const rule=getRuleForIp(ip);
+              const isMe=ip===clientIp;
+              return(
+                <div key={ip} style={{marginBottom:"0.75rem",padding:"1rem 1.25rem",borderRadius:"10px",background:isMe?"#0a1a0a":rule?.rule_type==="blacklist"?"#1a0a0a":rule?.rule_type==="whitelist"?"#0a0a1a":"#0f0f0f",border:`1px solid ${isMe?"#22c55e":rule?.rule_type==="blacklist"?"#ef444440":rule?.rule_type==="whitelist"?"#3b82f640":"#1e1e1e"}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+                    <div style={{fontFamily:"monospace",fontSize:"0.95rem",color:isMe?"#22c55e":rule?.rule_type==="blacklist"?"#ef4444":rule?.rule_type==="whitelist"?"#60a5fa":"#ccc",fontWeight:"bold"}}>
+                      {ip} {isMe&&"← Du"}
+                    </div>
+                    {rule&&<span style={{fontSize:"0.68rem",padding:"0.15rem 0.5rem",borderRadius:"4px",background:rule.rule_type==="blacklist"?"#ef444420":"#3b82f620",color:rule.rule_type==="blacklist"?"#ef4444":"#60a5fa",border:`1px solid ${rule.rule_type==="blacklist"?"#ef444440":"#3b82f640"}`}}>{rule.rule_type==="blacklist"?"🚫 Gesperrt":"✅ Whitelist"}</span>}
+                    <span style={{fontSize:"0.75rem",color:"#555",marginLeft:"auto"}}>{count}× · zuletzt {new Date(last).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>
+                  </div>
+                  {[...agents].slice(0,1).map((a,i)=><div key={i} style={{fontSize:"0.7rem",color:"#333",marginTop:"0.3rem",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a}</div>)}
+                  <div style={{display:"flex",gap:"0.5rem",marginTop:"0.75rem"}}>
+                    {rule?.rule_type!=="whitelist"&&<button onClick={()=>addRule(ip,"whitelist")} style={{padding:"0.3rem 0.75rem",borderRadius:"6px",background:"#0a1a3a",border:"1px solid #3b82f640",color:"#60a5fa",cursor:"pointer",fontSize:"0.75rem",fontFamily:"inherit"}}>✅ Whitelist</button>}
+                    {rule?.rule_type!=="blacklist"&&<button onClick={()=>addRule(ip,"blacklist")} style={{padding:"0.3rem 0.75rem",borderRadius:"6px",background:"#1a0a0a",border:"1px solid #ef444440",color:"#ef4444",cursor:"pointer",fontSize:"0.75rem",fontFamily:"inherit"}}>🚫 Sperren</button>}
+                    {rule&&<button onClick={()=>deleteRule(rule.id)} style={{padding:"0.3rem 0.75rem",borderRadius:"6px",background:"#111",border:"1px solid #2a2a2a",color:"#555",cursor:"pointer",fontSize:"0.75rem",fontFamily:"inherit"}}>Regel entfernen</button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Regeln */}
+        {!loading&&tab==="rules"&&(
+          <div>
+            {rules.length===0&&<div style={{textAlign:"center",padding:"2rem",color:"#555"}}>Noch keine Regeln definiert.</div>}
+            {rules.map(r=>(
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:"1rem",padding:"0.9rem 1.25rem",borderRadius:"10px",background:"#0f0f0f",border:`1px solid ${r.rule_type==="blacklist"?"#ef444430":"#3b82f630"}`,marginBottom:"0.5rem"}}>
+                <span style={{fontSize:"1.2rem"}}>{r.rule_type==="blacklist"?"🚫":"✅"}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"monospace",color:r.rule_type==="blacklist"?"#ef4444":"#60a5fa",fontWeight:"bold"}}>{r.ip}</div>
+                  {r.note&&<div style={{fontSize:"0.75rem",color:"#555",marginTop:"0.1rem"}}>{r.note}</div>}
+                </div>
+                <div style={{fontSize:"0.72rem",color:"#444"}}>{new Date(r.created_at).toLocaleDateString("de-DE")}</div>
+                <button onClick={()=>deleteRule(r.id)} style={{padding:"0.3rem 0.65rem",borderRadius:"6px",background:"transparent",border:"1px solid #2a2a2a",color:"#555",cursor:"pointer",fontSize:"0.75rem",fontFamily:"inherit"}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* IP hinzufügen */}
+        {tab==="add"&&(
+          <div style={{maxWidth:"500px"}}>
+            <div style={{marginBottom:"1rem"}}>
+              <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.5rem",letterSpacing:"0.1em"}}>IP-ADRESSE</div>
+              <input value={newIp} onChange={e=>setNewIp(e.target.value)} placeholder="z.B. 192.168.1.1"
+                style={{width:"100%",background:"#0f0f0f",border:"1px solid #252525",borderRadius:"8px",padding:"0.75rem 1rem",color:"#ddd",fontSize:"0.9rem",outline:"none",fontFamily:"monospace",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{marginBottom:"1.25rem"}}>
+              <div style={{fontSize:"0.72rem",color:"#555",marginBottom:"0.5rem",letterSpacing:"0.1em"}}>NOTIZ (OPTIONAL)</div>
+              <input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder="z.B. Mein Laptop"
+                style={{width:"100%",background:"#0f0f0f",border:"1px solid #252525",borderRadius:"8px",padding:"0.75rem 1rem",color:"#ddd",fontSize:"0.9rem",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem"}}>
+              <button onClick={()=>addRule(newIp,"whitelist",newNote)} disabled={!newIp.trim()}
+                style={{padding:"0.85rem",borderRadius:"10px",background:newIp.trim()?"#0a1a3a":"#111",border:`1px solid ${newIp.trim()?"#3b82f6":"#1e1e1e"}`,color:newIp.trim()?"#60a5fa":"#333",cursor:newIp.trim()?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:"bold"}}>
+                ✅ Whitelist hinzufügen
+              </button>
+              <button onClick={()=>addRule(newIp,"blacklist",newNote)} disabled={!newIp.trim()}
+                style={{padding:"0.85rem",borderRadius:"10px",background:newIp.trim()?"#1a0a0a":"#111",border:`1px solid ${newIp.trim()?"#ef4444":"#1e1e1e"}`,color:newIp.trim()?"#ef4444":"#333",cursor:newIp.trim()?"pointer":"not-allowed",fontFamily:"inherit",fontWeight:"bold"}}>
+                🚫 Sperren
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Hauptapp ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn,setLoggedIn]=useState(sessionStorage.getItem("fisi_auth")==="1");
@@ -2195,7 +2342,24 @@ export default function App() {
   const [page,setPage]=useState("lernportal");
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showMobileFilter,setShowMobileFilter]=useState(false);
+  const [clientIp,setClientIp]=useState(null);
+  const [blocked,setBlocked]=useState(false);
+  const [devMode]=useState(()=>window.location.search.includes("dev=true"));
   useEffect(()=>{ const check=()=>setIsMobile(window.innerWidth<768); window.addEventListener("resize",check); return ()=>window.removeEventListener("resize",check); },[]);
+  useEffect(()=>{
+  async function checkIp(){
+    try{
+      const r=await fetch("https://api.ipify.org?format=json");
+      const {ip}=await r.json();
+      setClientIp(ip);
+      await supabase.from("visitor_logs").insert({ip,user_agent:navigator.userAgent});
+      const{data:rule}=await supabase.from("ip_rules").select("rule_type").eq("ip",ip).maybeSingle();
+      if(rule?.rule_type==="blacklist"){setBlocked(true);}
+      else if(rule?.rule_type==="whitelist"){setLoggedIn(true);}
+    }catch(e){}
+  }
+  if(supabase)checkIp();
+},[]);
   const [showUpload,setShowUpload]=useState(false);
   const [selected,setSelected]=useState(null);
   const [kiItem,setKiItem]=useState(null);
@@ -2213,6 +2377,15 @@ export default function App() {
   const markGeoeffnet=(id)=>{ setFortschrittData(prev=>{ const next={...prev,[id]:{...prev[id],geoeffnet_am:Date.now()}}; try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){} return next; }); };
   const saveNotiz=(id,text)=>{ setFortschrittData(prev=>{ const next={...prev,[id]:{...prev[id],notiz:text}}; try{localStorage.setItem("fisi_fp",JSON.stringify(next));}catch(e){} return next; }); };
 
+  if(blocked)return(
+  <div style={{minHeight:"100vh",background:"#070707",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{textAlign:"center",padding:"2rem"}}>
+      <div style={{fontSize:"4rem",marginBottom:"1rem"}}>🚫</div>
+      <div style={{fontFamily:"'Courier New',monospace",fontSize:"1.3rem",color:"#ef4444",fontWeight:"bold",marginBottom:"0.5rem"}}>Zugriff verweigert</div>
+      <div style={{color:"#555",fontSize:"0.85rem"}}>Deine IP-Adresse wurde gesperrt.</div>
+    </div>
+  </div>
+);
   if(!supabase) return <SetupBanner/>;
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
@@ -2255,6 +2428,9 @@ export default function App() {
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:#0c0c0c}::-webkit-scrollbar-thumb{background:#252525;border-radius:3px}
         .card{transition:transform .18s,box-shadow .18s;cursor:pointer}.card:hover{transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.5)}
         .sbtn{transition:all .15s}.sbtn:hover{color:#ccc!important;background:#111!important}
+        {devMode&&<button onClick={()=>setPage("dev")} className="sbtn" style={{marginTop:"auto",borderColor:page==="dev"?"#f97316":"",color:page==="dev"?"#f97316":""}}>
+          <Icon name="shield" size={16}/>Dev
+        </button>}
         .sidebar{transition:width 0.3s ease,opacity 0.3s ease}.navbtn{transition:all 0.2s}
         body{margin:0;padding:0;background:#070707}
         .mobile-bottom-nav{display:none}.mobile-filter-overlay{display:none}
@@ -2285,6 +2461,7 @@ export default function App() {
           <button onClick={()=>setPage("statistik")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="statistik"?"#22c55e":"transparent",color:page==="statistik"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="statistik"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="chart" size={14}/>Statistik</button>
           <button onClick={()=>setPage("karteikarten")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="karteikarten"?"#f97316":"transparent",color:page==="karteikarten"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="karteikarten"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="card" size={14}/>Karteikarten</button>
           <button onClick={()=>setPage("subnetting")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="subnetting"?"#38bdf8":"transparent",color:page==="subnetting"?"#000":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="subnetting"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="subnet" size={14}/>Subnetting</button>
+          {devMode&&<button onClick={()=>setPage("dev")} className="navbtn" style={{padding:"0.5rem 1rem",borderRadius:"8px",border:"none",background:page==="dev"?"#f97316":"transparent",color:page==="dev"?"#fff":"#555",cursor:"pointer",fontFamily:"inherit",fontSize:"0.82rem",fontWeight:page==="dev"?"bold":"normal",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="shield" size={14}/>Dev</button>}
           <div style={{width:"1px",height:"20px",background:"#1e1e1e",margin:"0 0.2rem"}}/>
           <button onClick={loadItems} style={{background:"none",border:"1px solid #1e1e1e",borderRadius:"8px",padding:"0.45rem 0.8rem",color:"#555",cursor:"pointer",fontSize:"0.78rem",fontFamily:"inherit",display:"flex",alignItems:"center",gap:"0.4rem"}}><Icon name="refresh" size={13}/>Sync</button>
           {page==="lernportal"&&<button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:"0.45rem",background:"#fff",color:"#000",border:"none",borderRadius:"8px",padding:"0.5rem 1rem",fontSize:"0.82rem",fontWeight:"bold",cursor:"pointer",fontFamily:"inherit"}}><Icon name="plus" size={14}/>Hinzufügen</button>}
@@ -2370,6 +2547,7 @@ export default function App() {
         {page==="statistik" && <StatistikPage items={items} fortschrittData={fortschrittData}/>}
         {page==="karteikarten" && <KarteikartenModus items={items}/>}
         {page==="subnetting" && <SubnettingTrainer/>}
+        {page==="dev"&&devMode&&<DevDashboard clientIp={clientIp}/>}
 
         {page==="lernportal" && (
           <div style={{flex:1,padding:isMobile?"0.75rem":"1.25rem 1.75rem",overflow:"auto",minWidth:0}}>
@@ -2446,6 +2624,7 @@ export default function App() {
             {id:"statistik",icon:"chart",label:"Statistik",color:"#22c55e"},
             {id:"karteikarten",icon:"card",label:"Karten",color:"#f97316"},
             {id:"subnetting",icon:"subnet",label:"Subnet",color:"#38bdf8"},
+            (devMode?[{id:"dev",icon:"shield",label:"Dev",color:"#f97316"}]:[])
           ].map(tab=>(
             <button key={tab.id} onClick={()=>setPage(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"0.2rem",background:"none",border:"none",cursor:"pointer",padding:"0.4rem",borderRadius:"10px",color:page===tab.id?tab.color:"#444",transition:"all 0.2s"}}>
               <div style={{width:"28px",height:"28px",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"8px",background:page===tab.id?`${tab.color}18`:"transparent"}}><Icon name={tab.icon} size={18}/></div>
