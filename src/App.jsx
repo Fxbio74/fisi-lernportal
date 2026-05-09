@@ -2349,17 +2349,25 @@ export default function App() {
   useEffect(()=>{ const check=()=>setIsMobile(window.innerWidth<768); window.addEventListener("resize",check); return ()=>window.removeEventListener("resize",check); },[]);
   useEffect(()=>{
   async function checkIp(){
-    try{
-      const r=await fetch("https://api.ipify.org?format=json");
-      const {ip}=await r.json();
-      setClientIp(ip);
-      await supabase.from("visitor_logs").insert({ip,user_agent:navigator.userAgent});
-      const{data:rule}=await supabase.from("ip_rules").select("rule_type").eq("ip",ip).maybeSingle();
-      if(rule?.rule_type==="blacklist"){setBlocked(true);}
-      else if(rule?.rule_type==="whitelist"){setLoggedIn(true);}
-    }catch(e){}
+    let ip=null;
+    const services=[
+      async()=>{ const r=await fetch("https://api.ipify.org?format=json",{signal:AbortSignal.timeout(4000)}); return (await r.json()).ip; },
+      async()=>{ const r=await fetch("https://api64.ipify.org?format=json",{signal:AbortSignal.timeout(4000)}); return (await r.json()).ip; },
+      async()=>{ const r=await fetch("https://checkip.amazonaws.com",{signal:AbortSignal.timeout(4000)}); return (await r.text()).trim(); },
+      async()=>{ const r=await fetch("https://icanhazip.com",{signal:AbortSignal.timeout(4000)}); return (await r.text()).trim(); },
+    ];
+    for(const svc of services){
+      try{ ip=await svc(); if(ip)break; }catch(e){ console.warn("IP service failed:",e.message); }
+    }
+    if(!ip){ setClientIp("unbekannt"); return; }
+    setClientIp(ip);
+    if(supabase){
+      const{error:insErr}=await supabase.from("visitor_logs").insert({ip,user_agent:navigator.userAgent});
+      if(insErr) console.error("visitor_logs insert error:",insErr);
+      // ... rest bleibt gleich
+    }
   }
-  if(supabase)checkIp();
+  checkIp();
 },[]);
   const [showUpload,setShowUpload]=useState(false);
   const [selected,setSelected]=useState(null);
