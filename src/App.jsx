@@ -17,7 +17,7 @@ const CAT_COLORS = {
   "Datenbanken":     { bg:"#0a1828", badge:"#38bdf8" },
   "Hardware":        { bg:"#2e0f0f", badge:"#ef4444" },
   "WiSo":            { bg:"#1e0a1e", badge:"#ec4899" },
-  "GK":              { bg:"#052e16", badge:"#22c55e" },
+  "GK":              { bg:"#052e16", badge:"#34d399" },
   "Sonstiges":       { bg:"#111",    badge:"#888"    },
 };
 const FILE_ICONS = {
