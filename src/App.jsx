@@ -410,7 +410,9 @@ function PruefungsGenerator({ items }) {
     setStep("generating"); setGenProgress("KI analysiert ausgewählte Themen...");
     const mcCount = Math.round(anzahl * mcAnteil / 100);
     const textCount = anzahl - mcCount;
-    const context = selectedItems.map(i => `### ${i.title} (${i.category})\n${(i.content||"").substring(0,800)}`).join("\n\n");
+    const shuffled=[...selectedItems].sort(()=>Math.random()-0.5);
+    const limited=shuffled.slice(0,Math.min(selectedItems.length,12));
+    const context=limited.map(i=>`### ${i.title} (${i.category})\n${(i.content||"").substring(0,250)}`).join("\n\n");
     const systemPrompt = `Du bist ein IHK-Pruefungsersteller fuer Fachinformatiker Systemintegration, IHK Heilbronn. Erstelle eine realistische Abschlusspruefung. Antworte NUR mit validem JSON-Array, kein Text davor oder danach, keine Markdown-Backticks.`;
     const userMsg = `Erstelle eine FISI IHK-Pruefung mit genau ${anzahl} Fragen (${mcCount} Multiple Choice + ${textCount} Freitext-Fragen).
 Schwierigkeit: ${schwierigkeit}
