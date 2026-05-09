@@ -2351,7 +2351,7 @@ export default function App() {
   async function checkIp(){
     let ip=null;
     const services=[
-      async()=>{ const r=await fetch("https://api.ipify.org?format=json",{signal:AbortSignal.timeout(4000)}); return (await r.json()).ip; },
+      async () => { try { return (await (await fetch("/api/get-ip", { signal: AbortSignal.timeout(4000) })).json()).ip; } catch { return "unbekannt"; } },
       async()=>{ const r=await fetch("https://api64.ipify.org?format=json",{signal:AbortSignal.timeout(4000)}); return (await r.json()).ip; },
       async()=>{ const r=await fetch("https://checkip.amazonaws.com",{signal:AbortSignal.timeout(4000)}); return (await r.text()).trim(); },
       async()=>{ const r=await fetch("https://icanhazip.com",{signal:AbortSignal.timeout(4000)}); return (await r.text()).trim(); },
