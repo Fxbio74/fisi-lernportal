@@ -368,16 +368,26 @@ function PruefungsGenerator({ items }) {
     return{note,label,color};
   }
 
-  const fetchPruefKiEval=async(mcs,mcTotal)=>{
-    setPruefKiLoading(true);
-    const n=calcNoteLinear(mcs,mcTotal);
-    const pct=mcTotal>0?Math.round(mcs/mcTotal*100):0;
-    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown.";
-    const content=`Ich habe eine FISI-Prüfung (${schwierigkeit}) abgegeben: ${mcs}/${mcTotal} MC-Fragen richtig (${pct}%) → Note ${n.note} (${n.label}).\n\nBitte gib mir:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Konkrete Lerntipps für die IHK-Prüfung`;
-    try{const r=await callKI([{role:"user",content}],system);setPruefKiEval(r);}catch(e){}
-    setPruefKiLoading(false);
-  };
-
+  const fetchPruefKiEval=async(mcs,mcTotal,allAnswers,allQuestions)=>{
+  setPruefKiLoading(true);
+  const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown mit ## Überschriften.";
+  const freitextQs=allQuestions.filter(q=>q.type==="text");
+  let content=`Ich habe eine FISI-Prüfung (${schwierigkeit}) abgegeben.\n\n`;
+  content+=`**Multiple Choice:** ${mcs}/${mcTotal} richtig (${mcTotal>0?Math.round(mcs/mcTotal*100):0}%)\n\n`;
+  if(freitextQs.length>0){
+    content+=`**Freitext-Antworten (bitte jede einzeln bewerten):**\n\n`;
+    freitextQs.forEach((q,i)=>{
+      const idx=allQuestions.indexOf(q);
+      const antwort=allAnswers[idx]?.trim()||"(keine Antwort)";
+      content+=`**Freitext ${i+1}: ${q.question}**\nMeine Antwort: ${antwort}\nErwartete Punkte: ${(q.musterpunkte||[]).join(" | ")}\n\n`;
+    });
+    content+=`Bitte:\n1. Bewerte jede Freitext-Antwort einzeln mit kurzer Erklärung (was war gut, was fehlte)\n2. Gib eine Gesamtnote für MC + Freitext zusammen (IHK linear)\n3. Top 3 konkrete Lerntipps`;
+  }else{
+    content+=`Bitte:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Top 3 Lerntipps für die IHK-Prüfung`;
+  }
+  try{const r=await callKI([{role:"user",content}],system);setPruefKiEval(r);}catch(e){console.error(e);}
+  setPruefKiLoading(false);
+};
   useEffect(() => {
     if (step === "pruefung" && zeitLimit > 0) {
       setTimeLeft(zeitLimit * 60);
@@ -433,12 +443,15 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
       const reply = await callKI([{role:"user",content:userMsg}], systemPrompt);
       const clean = reply.replace(/```json/g,"").replace(/```/g,"").trim();
       const parsed = JSON.parse(clean);
-      setQuestions(parsed); setAnswers({}); setSubmitted(false); setShowLoesung(false); setPruefKiEval(null); setStep("pruefung");
-    } catch(e) {
-      alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
-      setStep("config");
-    }
-  };
+      const mcParsed=parsed.filter(q=>q.type==="mc").slice(0,mcCount);
+      const txParsed=parsed.filter(q=>q.type==="text").slice(0,textCount);
+      const final=[...mcParsed,...txParsed].slice(0,anzahl);
+      setQuestions(final); setAnswers({});
+          } catch(e) {
+            alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
+            setStep("config");
+          }
+        };
 
   const mcQuestions = questions.filter(q => q.type === "mc");
   const mcScore = submitted ? mcQuestions.filter(q => { const i=questions.indexOf(q); return answers[i]===q.correct; }).length : 0;
@@ -629,7 +642,7 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                   h.unshift({date:new Date().toISOString(),title:pruefungTitle,total:questions.length,mcTotal:mc.length,mcScore:mcs,percent:mc.length>0?Math.round((mcs/mc.length)*100):0,schwierigkeit});
                   localStorage.setItem("fisi_pruef_history",JSON.stringify(h.slice(0,50)));
                   setSubmitted(true);
-                  fetchPruefKiEval(mcs,mc.length);
+                  fetchPruefKiEval(mcs,mc.length,answers,questions);
                 }} disabled={!allAnswered} style={{padding:"0.85rem 2rem",borderRadius:"10px",background:allAnswered?"#22c55e":"#1a1a1a",border:"none",color:allAnswered?"#000":"#444",fontSize:"0.95rem",fontWeight:"bold",cursor:allAnswered?"pointer":"not-allowed",fontFamily:"inherit"}}>
                   {allAnswered?"Prüfung abgeben ✓":`Noch ${questions.length-Object.keys(answers).length} offen`}
                 </button>
