@@ -369,25 +369,26 @@ function PruefungsGenerator({ items }) {
   }
 
   const fetchPruefKiEval=async(mcs,mcTotal,allAnswers,allQuestions)=>{
-  setPruefKiLoading(true);
-  const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown mit ## Überschriften.";
-  const freitextQs=allQuestions.filter(q=>q.type==="text");
-  let content=`Ich habe eine FISI-Prüfung (${schwierigkeit}) abgegeben.\n\n`;
-  content+=`**Multiple Choice:** ${mcs}/${mcTotal} richtig (${mcTotal>0?Math.round(mcs/mcTotal*100):0}%)\n\n`;
-  if(freitextQs.length>0){
-    content+=`**Freitext-Antworten (bitte jede einzeln bewerten):**\n\n`;
-    freitextQs.forEach((q,i)=>{
-      const idx=allQuestions.indexOf(q);
-      const antwort=allAnswers[idx]?.trim()||"(keine Antwort)";
-      content+=`**Freitext ${i+1}: ${q.question}**\nMeine Antwort: ${antwort}\nErwartete Punkte: ${(q.musterpunkte||[]).join(" | ")}\n\n`;
-    });
-    content+=`Bitte:\n1. Bewerte jede Freitext-Antwort einzeln mit kurzer Erklärung (was war gut, was fehlte)\n2. Gib eine Gesamtnote für MC + Freitext zusammen (IHK linear)\n3. Top 3 konkrete Lerntipps`;
-  }else{
-    content+=`Bitte:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Top 3 Lerntipps für die IHK-Prüfung`;
-  }
-  try{const r=await callKI([{role:"user",content}],system);setPruefKiEval(r);}catch(e){console.error(e);}
-  setPruefKiLoading(false);
-};
+    setPruefKiLoading(true);
+    const system="Du bist FISI-Prüfungscoach IHK Heilbronn. Antworte auf Deutsch, präzise und motivierend. Benutze Markdown mit ## Überschriften.";
+    const freitextQs=allQuestions.filter(q=>q.type==="text");
+    let content=`Ich habe eine FISI-Prüfung (${schwierigkeit}) abgegeben.\n\n`;
+    content+=`**Multiple Choice:** ${mcs}/${mcTotal} richtig (${mcTotal>0?Math.round(mcs/mcTotal*100):0}%)\n\n`;
+    if(freitextQs.length>0){
+      content+=`**Freitext-Antworten (bitte jede einzeln bewerten):**\n\n`;
+      freitextQs.forEach((q,i)=>{
+        const idx=allQuestions.indexOf(q);
+        const antwort=allAnswers[idx]?.trim()||"(keine Antwort)";
+        content+=`**Freitext ${i+1}: ${q.question}**\nMeine Antwort: ${antwort}\nErwartete Punkte: ${(q.musterpunkte||[]).join(" | ")}\n\n`;
+      });
+      content+=`Bitte:\n1. Bewerte jede Freitext-Antwort einzeln mit kurzer Erklärung (was war gut, was fehlte)\n2. Gib eine Gesamtnote für MC + Freitext zusammen (IHK linear)\n3. Top 3 konkrete Lerntipps`;
+    }else{
+      content+=`Bitte:\n1. Kurze Einschätzung\n2. Schwachstellen\n3. Top 3 Lerntipps für die IHK-Prüfung`;
+    }
+    try{const r=await callKI([{role:"user",content}],system);setPruefKiEval(r);}catch(e){console.error(e);}
+    setPruefKiLoading(false);
+  };
+
   useEffect(() => {
     if (step === "pruefung" && zeitLimit > 0) {
       setTimeLeft(zeitLimit * 60);
@@ -434,7 +435,7 @@ ${context}
 JSON-Format (NUR das Array, kein anderer Text):
 [
   {"type":"mc","question":"Frage?","options":["Option A","Option B","Option C","Option D"],"correct":0,"explanation":"Begruendung","thema":"Themenname"},
-  {"type":"text","question":"Freitext-Frage?","musterpunkte":["Punkt 1","Punkt 2"],"thema":"Themenname"}
+  {"type":"text","question":"Freitext-Frage?","musterpunkte":["Punkt 1","Punkt 2","Punkt 3"],"thema":"Themenname"}
 ]
 
 Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit type="text".`;
@@ -446,12 +447,12 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
       const mcParsed=parsed.filter(q=>q.type==="mc").slice(0,mcCount);
       const txParsed=parsed.filter(q=>q.type==="text").slice(0,textCount);
       const final=[...mcParsed,...txParsed].slice(0,anzahl);
-      setQuestions(final); setAnswers({});
-          } catch(e) {
-            alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
-            setStep("config");
-          }
-        };
+      setQuestions(final); setAnswers({}); setSubmitted(false); setShowLoesung(false); setPruefKiEval(null); setStep("pruefung");
+    } catch(e) {
+      alert("Fehler beim Generieren: "+e.message+"\n\nBitte nochmal versuchen.");
+      setStep("config");
+    }
+  };
 
   const mcQuestions = questions.filter(q => q.type === "mc");
   const mcScore = submitted ? mcQuestions.filter(q => { const i=questions.indexOf(q); return answers[i]===q.correct; }).length : 0;
@@ -572,17 +573,23 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
           </div>
 
           {submitted&&(()=>{
+            const freitextQs=questions.filter(q=>q.type==="text");
             const n=calcNoteLinear(mcScore,mcQuestions.length);
             return(
-              <div style={{textAlign:"center",padding:"1.5rem",borderRadius:"12px",marginBottom:"1.5rem",background:"#0f172a",border:`2px solid ${n.color}`}}>
-                <div style={{fontSize:"4rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
-                <div style={{fontSize:"1.3rem",color:n.color,marginTop:"0.4rem"}}>{n.label}</div>
-                <div style={{color:"#94a3b8",marginTop:"0.5rem",fontSize:"1rem"}}>{mcScore}/{mcQuestions.length} MC-Fragen · {mcPercent}%</div>
-                {questions.some(q=>q.type==="text")&&<div style={{fontSize:"0.8rem",color:"#888",marginTop:"0.5rem"}}>Freitext-Fragen: Vergleiche deine Antworten mit den Musterpunkten</div>}
-                {pruefKiLoading&&<div style={{marginTop:"1rem",color:"#94a3b8",fontSize:"0.85rem"}}>KI analysiert deine Prüfung…</div>}
-                {pruefKiEval&&<div style={{marginTop:"1rem",padding:"1rem",background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:"10px",textAlign:"left"}}>
-                  <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.5rem",fontSize:"0.85rem"}}>KI-Auswertung</div>
-                  <div style={{color:"#e2e8f0",fontSize:"0.82rem"}}>{renderMarkdown(pruefKiEval)}</div>
+              <div style={{borderRadius:"12px",marginBottom:"1.5rem",background:"#0f172a",border:`2px solid ${n.color}`,overflow:"hidden"}}>
+                <div style={{textAlign:"center",padding:"1.5rem 1.5rem 1rem"}}>
+                  <div style={{fontSize:"4rem",fontWeight:"bold",color:n.color,lineHeight:1}}>{n.note}</div>
+                  <div style={{fontSize:"1.3rem",color:n.color,marginTop:"0.4rem"}}>{n.label}</div>
+                  <div style={{color:"#94a3b8",marginTop:"0.5rem",fontSize:"0.95rem"}}>
+                    MC: {mcScore}/{mcQuestions.length} richtig ({mcPercent}%)
+                    {freitextQs.length>0&&<span style={{color:"#a855f7",marginLeft:"0.75rem"}}>· {freitextQs.length} Freitext → KI-Bewertung unten</span>}
+                  </div>
+                  <div style={{fontSize:"0.72rem",color:"#475569",marginTop:"0.3rem"}}>Note basiert auf MC · KI bewertet Freitext separat</div>
+                </div>
+                {pruefKiLoading&&<div style={{padding:"1rem 1.5rem",color:"#94a3b8",fontSize:"0.85rem",borderTop:"1px solid #1e293b",display:"flex",alignItems:"center",gap:"0.5rem"}}><div style={{width:"10px",height:"10px",borderRadius:"50%",background:"#38bdf8",animation:"pulse 1.2s infinite"}}/>KI analysiert deine Prüfung inkl. Freitext-Antworten…</div>}
+                {pruefKiEval&&<div style={{padding:"1.25rem 1.5rem",background:"#0a0f1a",borderTop:"1px solid #1e293b",textAlign:"left"}}>
+                  <div style={{fontWeight:"bold",color:"#38bdf8",marginBottom:"0.75rem",fontSize:"0.8rem",letterSpacing:"0.1em"}}>KI-AUSWERTUNG</div>
+                  <div style={{color:"#e2e8f0",fontSize:"0.83rem"}}>{renderMarkdown(pruefKiEval)}</div>
                 </div>}
               </div>
             );
@@ -621,8 +628,13 @@ Wichtig: Exakt ${mcCount} Objekte mit type="mc" und ${textCount} Objekte mit typ
                     <textarea value={answers[i]||""} onChange={e=>!submitted&&setAnswers(a=>({...a,[i]:e.target.value}))} disabled={submitted} placeholder="Deine Antwort eingeben..." rows={4} style={{width:"100%",background:"#0a0a0a",border:"1px solid #2a2a2a",borderRadius:"8px",padding:"0.75rem 1rem",color:"#ccc",fontSize:"0.85rem",outline:"none",fontFamily:"'Courier New',monospace",lineHeight:"1.7",resize:"vertical",boxSizing:"border-box",opacity:submitted?0.8:1}}/>
                     {submitted&&q.musterpunkte&&(
                       <div style={{marginTop:"0.6rem",padding:"0.75rem 1rem",background:"#0a1228",border:"1px solid #1a3a5a",borderRadius:"8px"}}>
-                        <div style={{fontSize:"0.7rem",color:"#60a5fa",letterSpacing:"0.1em",marginBottom:"0.4rem",fontWeight:"bold"}}>MUSTERPUNKTE:</div>
-                        {q.musterpunkte.map((p,j)=><div key={j} style={{fontSize:"0.8rem",color:"#93c5fd",display:"flex",gap:"0.4rem",marginBottom:"0.2rem"}}><span style={{color:"#3b82f6",flexShrink:0}}>•</span>{p}</div>)}
+                        <div style={{fontSize:"0.7rem",color:"#60a5fa",letterSpacing:"0.1em",marginBottom:"0.5rem",fontWeight:"bold"}}>ERWARTETE INHALTE:</div>
+                        {q.musterpunkte.map((p,j)=>(
+                          <div key={j} style={{fontSize:"0.82rem",color:"#93c5fd",display:"flex",gap:"0.5rem",marginBottom:"0.35rem",lineHeight:1.5}}>
+                            <span style={{color:"#3b82f6",flexShrink:0,marginTop:"1px"}}>→</span><span>{p}</span>
+                          </div>
+                        ))}
+                        <div style={{marginTop:"0.6rem",fontSize:"0.72rem",color:"#475569",borderTop:"1px solid #1a2a3a",paddingTop:"0.4rem"}}>Detaillierte Bewertung deiner Antwort siehst du in der KI-Auswertung oben</div>
                       </div>
                     )}
                   </div>
